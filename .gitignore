@@ -1,0 +1,10 @@
+.env
+*.pyc
+__pycache__/
+.venv/
+venv/
+logs/*.log
+projects/*/data/*.db
+projects/*/output/
+projects/*/charts/
+projects/*/html/

@@ -1,0 +1,13 @@
+ieul:
+  name: "イエウール"
+  url: "https://example.com/ieul"  # Phase 1はダミーURL（Phase 2で実際のアフィリエイトリンクに差し替え）
+  text: "無料で複数社に一括査定を依頼する"
+  button_color: "#FF6B35"
+  description: "全国1,600社以上の不動産会社から最大6社に一括査定"
+
+sumai_value:
+  name: "すまいValue"
+  url: "https://example.com/sumai"  # Phase 1はダミーURL（Phase 2で実際のアフィリエイトリンクに差し替え）
+  text: "大手6社に査定依頼"
+  button_color: "#1E3A8A"
+  description: "三井のリハウス、住友不動産販売など大手6社に一括査定"

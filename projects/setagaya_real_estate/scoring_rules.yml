@@ -1,0 +1,101 @@
+safety:
+  # 犯罪件数ベースのスコアリング
+  excellent:
+    max_crimes: 30
+    score_range: [90, 100]
+    description: "犯罪件数が30件以下の非常に安全なエリア"
+  good:
+    max_crimes: 50
+    score_range: [70, 89]
+    description: "犯罪件数が50件以下の比較的安全なエリア"
+  average:
+    max_crimes: 80
+    score_range: [50, 69]
+    description: "犯罪件数が80件以下の平均的なエリア"
+  poor:
+    max_crimes: 999
+    score_range: [0, 49]
+    description: "犯罪件数が多いエリア"
+
+education:
+  # 学校・保育園の数と距離
+  # Phase 2で実装予定
+  elementary_school:
+    within_500m:
+      score: 30
+      description: "徒歩5分圏内に小学校あり"
+    within_1000m:
+      score: 20
+      description: "徒歩10分圏内に小学校あり"
+    none:
+      score: 0
+      description: "近くに小学校なし"
+
+  daycare:
+    5_or_more:
+      score: 20
+      description: "保育園が5つ以上"
+    3_to_4:
+      score: 15
+      description: "保育園が3〜4つ"
+    1_to_2:
+      score: 10
+      description: "保育園が1〜2つ"
+    none:
+      score: 0
+      description: "保育園なし"
+
+convenience:
+  # 駅・店舗へのアクセス
+  # Phase 2で実装予定
+  station_distance:
+    within_500m:
+      score: 40
+      description: "駅まで徒歩5分以内"
+    within_1000m:
+      score: 30
+      description: "駅まで徒歩10分以内"
+    within_1500m:
+      score: 20
+      description: "駅まで徒歩15分以内"
+    over_1500m:
+      score: 10
+      description: "駅まで徒歩15分以上"
+
+  shops:
+    convenience_stores:
+      per_store: 5
+      max_score: 20
+      description: "コンビニの数（1店舗=5点、最大20点）"
+    supermarkets:
+      per_store: 10
+      max_score: 20
+      description: "スーパーの数（1店舗=10点、最大20点）"
+
+asset_value:
+  # 不動産価格トレンド
+  # Phase 2で実装予定
+  price_trend:
+    increasing:
+      score: 90
+      description: "価格上昇トレンド"
+    stable:
+      score: 70
+      description: "価格安定"
+    decreasing:
+      score: 50
+      description: "価格下降トレンド"
+
+living:
+  # 住環境（公園、医療施設など）
+  # Phase 2で実装予定
+  parks:
+    per_park: 10
+    max_score: 30
+    description: "公園の数（1つ=10点、最大30点）"
+
+  medical:
+    hospitals:
+      per_facility: 15
+      max_score: 30
+      description: "病院・クリニックの数（1つ=15点、最大30点）"
