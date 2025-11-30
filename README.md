@@ -1,36 +1,91 @@
-# RealEstateBot - Phase 1 MVP
+# RealEstateBot - データ基盤 & 記事生成システム
 
-## 1. エグゼクティブサマリー
+## 📋 プロジェクト概要
 
-### 1.1. プロジェクトの目的
-町丁目レベルの住みやすさ×売却相場という唯一無二のポジションで、不動産売却を検討する人に総合的な判断材料を提供し、アフィリエイト収益月10万円を目指す。
+町丁目レベルの住みやすさ×不動産資産価値を分析し、記事を自動生成するシステム。
 
-### 1.2. 主要な特徴
-
-| 特徴 | 説明 |
-|------|------|
-| 唯一無二のポジション | ウチノカチ・LIFULL HOME'Sにない「町丁目×住みやすさ×売却相場」統合 |
-| 公的データ基盤 | 警視庁、e-Stat、国土交通省の信頼できるデータのみ使用 |
-| スコア化・可視化 | 5軸レーダーチャート（治安・教育・利便性・資産価値・住環境） |
-| プログラマティックSEO | 250→1,000ページ自動生成で検索上位独占 |
-| CSV→DB移行対応 | 初期はCSV、成長に合わせてDB移行可能な設計 |
-| モジュラー設計 | プロンプト・設定を外部化、保守性・拡張性を最大化 |
-
-### 1.3. 技術スタック
-
-- **言語**: Python 3.11+
-- **AI**: Claude Sonnet 4.5 (Anthropic)
-- **データ管理**: CSV → SQLite → PostgreSQL (段階的移行)
-- **外部API**: 警視庁API、e-Stat API、国土数値情報API
-- **設定管理**: YAML + python-dotenv
-- **可視化**: Matplotlib (レーダーチャート)
-- **CMS連携**: WordPress REST API (将来)
+**現在の状態**:
+- ✅ **Phase 1**: データ基盤構築完了（PostgreSQL + 国土数値情報）
+- ✅ **Phase 1 MVP**: AI記事生成パイプライン完了（既存実装）
+- 🚧 **Phase 2**: データソース統合・分析機能強化（計画中）
 
 ---
 
-## 2. クイックスタート
+## 🎯 プロジェクトの目的
 
-### 2.1. 環境構築
+1. **データドリブンな不動産分析**: 公的データ（国土数値情報、e-Stat）を活用
+2. **町丁目レベルの詳細分析**: 区・市レベルではなく、より細かい町丁目単位
+3. **資産価値の可視化**: 地価推移、人口動態を基にしたスコアリング
+4. **AI記事自動生成**: Claude Sonnet 4.5による高品質な記事作成
+
+---
+
+## 🏗️ アーキテクチャ
+
+### データフロー
+
+```
+[国土数値情報] ───┐
+[東京都オープンデータ] ─┤
+[e-Stat API]  ───┘
+        ↓
+   データ収集（collectors）
+        ↓
+   データ変換（converters）
+        ↓
+   PostgreSQL Database
+        ↓
+   データ分析（analysis）
+        ↓
+   AI記事生成（LLM）
+        ↓
+   HTML出力
+```
+
+### ディレクトリ構成
+
+```
+real_estate_bot/
+├── config/                # 設定ファイル
+│   ├── database.yml      # DB接続設定
+│   ├── data_sources.yml  # データソース定義
+│   └── project.yml       # プロジェクト設定
+│
+├── db/                   # データベース
+│   ├── schema.sql       # スキーマ定義
+│   └── migrations/      # マイグレーション
+│
+├── src/                  # Phase 1: 新しい実装
+│   ├── models/          # データモデル
+│   ├── collectors/      # データ収集
+│   ├── converters/      # データ変換
+│   ├── database/        # データベース操作
+│   ├── analysis/        # データ分析
+│   ├── llm/             # LLM連携
+│   └── utils/           # ユーティリティ
+│
+├── modules/              # Phase 1 MVP: 既存実装（AI記事生成）
+│   ├── data_aggregator/
+│   ├── score_calculator/
+│   ├── chart_generator/
+│   ├── content_generator/
+│   └── html_builder/
+│
+├── scripts/              # 実行スクリプト
+│   ├── 01_setup_database.py    # DB初期化
+│   ├── 02_download_data.py     # データダウンロード
+│   └── 03_import_data.py       # データインポート
+│
+└── data/                 # データファイル
+    ├── raw/             # 生データ
+    └── processed/       # 変換後データ
+```
+
+---
+
+## 🚀 クイックスタート
+
+### 1. 環境構築
 
 ```bash
 # リポジトリをクローン
@@ -46,272 +101,217 @@ pip install -r requirements.txt
 
 # 環境変数を設定
 cp .env.example .env
-# .envファイルを編集してANTHROPIC_API_KEYを設定
-```
-
-### 2.2. 最初の記事を生成
-
-```bash
-# データ収集のみ実行（APIキー不要）
-python main_orchestrator.py 
-  --project projects/setagaya_real_estate/config.yml 
-  --mode data_only 
-  --limit 5
-
-# 全パイプライン実行（記事生成まで）
-python main_orchestrator.py 
-  --project projects/setagaya_real_estate/config.yml 
-  --mode full 
-  --limit 1
-```
-
-### 2.3. 生成された記事を確認
-
-```bash
-# Markdownファイル
-ls projects/setagaya_real_estate/output/
-
-# レーダーチャート
-ls projects/setagaya_real_estate/charts/
-
-# HTMLファイル
-ls projects/setagaya_real_estate/html/
-```
-
----
-
-## 3. プロジェクト構成
-
-```
-real_estate_bot/
-├── main_orchestrator.py          # メインエントリーポイント
-├── requirements.txt               # Python依存パッケージ
-├── .env.example                   # 環境変数テンプレート
-├── .gitignore                     # Git除外設定
-│
-├── core/                          # コアモジュール
-│   ├── models.py                  # データモデル定義
-│   ├── config.py                  # 設定管理
-│   ├── data_manager.py            # データ永続化層
-│   └── orchestrator.py            # パイプライン制御
-│
-├── modules/                       # 機能モジュール
-│   ├── data_aggregator/           # データ収集
-│   │   ├── aggregator.py
-│   │   └── collectors/
-│   │       ├── base_collector.py
-│   │       ├── crime_collector.py
-│   │       └── population_collector.py
-│   │
-│   ├── score_calculator/          # スコア計算
-│   │   ├── calculator.py
-│   │   └── scorers/
-│   │       ├── base_scorer.py
-│   │       └── safety_scorer.py
-│   │
-│   ├── chart_generator/           # レーダーチャート生成
-│   │   └── generator.py
-│   │
-│   ├── content_generator/         # AI記事生成
-│   │   ├── generator.py
-│   │   └── llm/
-│   │       ├── base_client.py
-│   │       └── anthropic_client.py
-│   │
-│   └── html_builder/              # HTML生成
-│       └── builder.py
-│
-├── projects/                      # プロジェクト別設定
-│   └── setagaya_real_estate/
-│       ├── config.yml             # プロジェクト設定
-│       ├── scoring_rules.yml      # スコアリングルール
-│       ├── affiliate_config.yml   # アフィリエイト設定
-│       ├── data/                  # データファイル
-│       │   ├── areas.csv
-│       │   └── crime_data.csv
-│       ├── prompts/               # AIプロンプト
-│       │   ├── persona.txt
-│       │   ├── outline.txt
-│       │   └── content.txt
-│       ├── templates/             # HTMLテンプレート
-│       │   └── article_template.html
-│       ├── output/                # 生成されたMarkdown
-│       ├── charts/                # 生成されたレーダーチャート
-│       └── html/                  # 生成されたHTML
-│
-└── logs/                          # ログファイル
-    └── real_estate_bot.log
-```
-
----
-
-## 4. 使い方
-
-### 4.1. コマンドラインオプション
-
-```bash
-python main_orchestrator.py [OPTIONS]
-```
-
-**必須オプション:**
-- `--project`: プロジェクト設定ファイルのパス
-
-**任意オプション:**
-- `--mode`: 実行モード（デフォルト: `full`）
-  - `full`: データ収集 + 記事生成
-  - `data_only`: データ収集のみ
-  - `generate_only`: 記事生成のみ（既存データを使用）
-- `--limit`: 処理する町丁目の最大数（デフォルト: 10）
-- `--debug`: デバッグモードで実行
-
-### 4.2. 使用例
-
-```bash
-# 5つの町丁目のデータ収集のみ
-python main_orchestrator.py \
-  --project projects/setagaya_real_estate/config.yml \
-  --mode data_only \
-  --limit 5
-
-# 全パイプライン実行（記事生成まで）
-python main_orchestrator.py \
-  --project projects/setagaya_real_estate/config.yml \
-  --mode full \
-  --limit 5
-
-# デバッグモードで実行
-python main_orchestrator.py \
-  --project projects/setagaya_real_estate/config.yml \
-  --mode full \
-  --limit 1 \
-  --debug
-```
-
----
-
-## 5. 設定ファイルのカスタマイズ
-
-### 5.1. プロジェクト設定（config.yml）
-
-プロジェクト全体の設定を管理します。
-
-```yaml
-project:
-  name: "setagaya_real_estate"
-  version: "1.0"
-
-llm:
-  provider: "anthropic"
-  model: "claude-sonnet-4-5-20250929"
-  temperature: 0.7
-  max_tokens: 8000
-```
-
-### 5.2. スコアリングルール（scoring_rules.yml）
-
-各スコアの計算ルールを定義します。
-
-```yaml
-safety:
-  excellent:
-    max_crimes: 30
-    score_range: [90, 100]
-  good:
-    max_crimes: 50
-    score_range: [70, 89]
-```
-
-### 5.3. アフィリエイト設定（affiliate_config.yml）
-
-アフィリエイトリンクの設定を管理します。
-
-```yaml
-ieul:
-  name: "イエウール"
-  url: "https://example.com/ieul"
-  text: "無料で複数社に一括査定を依頼する"
-  button_color: "#FF6B35"
-```
-
-### 5.4. AIプロンプト（prompts/*.txt）
-
-記事生成のプロンプトを外部ファイルで管理します。
-
-- `persona.txt`: ライターのペルソナ定義
-- `outline.txt`: アウトライン生成プロンプト
-- `content.txt`: 本文生成プロンプト
-
----
-
-## 6. Phase 1 MVPの制限事項
-
-Phase 1では以下の機能は簡易実装またはダミーデータです：
-
-- **人口データ**: ダミー値（Phase 2でe-Stat API実装予定）
-- **施設データ**: ダミー値（Phase 2で実装予定）
-- **教育スコア**: ダミー値（Phase 2で実装予定）
-- **利便性スコア**: ダミー値（Phase 2で実装予定）
-- **資産価値スコア**: ダミー値（Phase 2で実装予定）
-- **住環境スコア**: ダミー値（Phase 2で実装予定）
-
-**実装済み機能:**
-- ✅ 犯罪データ収集（CSV）
-- ✅ 治安スコア計算
-- ✅ レーダーチャート生成
-- ✅ AI記事生成（2段階: アウトライン→本文）
-- ✅ HTML生成
-
----
-
-## 7. トラブルシューティング
-
-### 7.1. ANTHROPIC_API_KEYが設定されていない
-
-```bash
-Error: ANTHROPIC_API_KEY is not set
-```
-
-**解決方法:**
-```bash
 # .envファイルを編集
-cp .env.example .env
-# .envにANTHROPIC_API_KEY=your-api-keyを追加
 ```
 
-### 7.2. データファイルが見つからない
+### 2. データベースセットアップ（Phase 1）
 
 ```bash
-Error: File not found: projects/setagaya_real_estate/data/areas.csv
+# PostgreSQLを起動（Dockerの場合）
+docker run -d \
+  --name real_estate_postgres \
+  -e POSTGRES_PASSWORD=yourpassword \
+  -e POSTGRES_DB=real_estate_dev \
+  -p 5432:5432 \
+  postgres:14
+
+# 環境変数を設定
+export DB_PASSWORD=yourpassword
+
+# データベース初期化
+python scripts/01_setup_database.py
 ```
 
-**解決方法:**
-データファイルが正しい場所に配置されているか確認してください。
+### 3. データ収集とインポート
 
-### 7.3. 日本語フォントが表示されない
+```bash
+# 国土数値情報から地価データをダウンロード
+python scripts/02_download_data.py --year 2024 --prefecture 13
 
-レーダーチャートで日本語が文字化けする場合、matplotlibのフォント設定を確認してください。
+# データベースにインポート
+python scripts/03_import_data.py --csv data/processed/master/kokudo_land_price_2024_13.csv
+```
+
+### 4. AI記事生成（Phase 1 MVP）
+
+```bash
+# 環境変数にANTHROPIC_API_KEYを設定
+export ANTHROPIC_API_KEY=sk-ant-xxxx
+
+# 記事生成（既存実装）
+python main_orchestrator.py \
+  --project projects/setagaya_real_estate/config.yml \
+  --mode full \
+  --limit 5
+```
 
 ---
 
-## 8. 次のステップ（Phase 2計画）
+## 📊 データベーススキーマ
 
-Phase 2では以下の機能を実装予定：
+### マスタテーブル
 
-1. **e-Stat API連携**: 人口統計データの取得
-2. **施設データ収集**: 学校、保育園、駅、店舗データ
-3. **全スコアの実装**: 教育、利便性、資産価値、住環境
-4. **データベース移行**: CSV → SQLite
-5. **自動化**: cron/GitHub Actionsでの定期実行
-6. **WordPress連携**: 記事の自動投稿
+- `prefectures`: 都道府県マスタ
+- `cities`: 市区町村マスタ
+- `choume`: 町丁目マスタ
+
+### 時系列データテーブル
+
+- `land_prices`: 地価公示データ（年次）
+- `population`: 人口データ（国勢調査、5年ごと）
+
+### 集計・分析テーブル
+
+- `land_price_summary`: 地価推移サマリー
+- `population_summary`: 人口推移サマリー
+- `area_scores`: エリアスコア計算結果
+- `graph_data`: グラフデータ（Chart.js形式）
 
 ---
 
-## 9. ライセンス
+## 📦 データソース
+
+| データソース | 内容 | 更新頻度 | Phase |
+|------------|------|---------|-------|
+| 国土数値情報 | 地価公示 | 年次 | ✅ Phase 1 |
+| 東京都オープンデータ | 地価調査 | 年次 | 🚧 Phase 2 |
+| e-Stat | 人口統計 | 5年ごと | 🚧 Phase 2 |
+| 警視庁 | 犯罪統計 | 月次 | 🚧 Phase 2 |
+
+---
+
+## 🔧 Phase 1実装状況
+
+### ✅ 完了
+
+- [x] PostgreSQLスキーマ設計
+- [x] データベース接続管理（connection.py）
+- [x] 国土数値情報コレクター（kokudo_collector.py）
+- [x] データ変換モジュール（unified_schema.py, converters）
+- [x] 住所正規化（address_normalizer.py）
+- [x] リポジトリパターン（repository.py）
+- [x] データインポートスクリプト（scripts/01-03）
+
+### 🚧 Phase 2計画
+
+- [ ] e-Stat API連携（人口データ）
+- [ ] 東京都オープンデータ連携
+- [ ] データ分析モジュール（trend_calculator, score_calculator）
+- [ ] グラフ生成（Chart.js形式）
+- [ ] 新旧実装の統合
+
+---
+
+## 🛠️ 技術スタック
+
+### データ基盤（Phase 1）
+
+- **Database**: PostgreSQL 14+
+- **GIS処理**: GeoPandas
+- **データ検証**: Pydantic
+- **API**: psycopg2
+
+### AI記事生成（Phase 1 MVP）
+
+- **LLM**: Anthropic Claude Sonnet 4.5
+- **データ処理**: Pandas
+- **グラフ生成**: Matplotlib
+- **HTML生成**: Markdown + Jinja2
+
+### 共通
+
+- **言語**: Python 3.11+
+- **設定管理**: YAML + python-dotenv
+- **ロギング**: Loguru
+
+---
+
+## 📝 使用例
+
+### データベースクエリ例
+
+```python
+from src.database.connection import get_db_connection
+from src.database.repository import LandPriceRepository
+
+# 接続
+db = get_db_connection()
+conn = db.get_connection()
+
+# リポジトリ作成
+repo = LandPriceRepository(conn)
+
+# データ取得
+data = repo.get_by_choume_and_year(
+    choume_code="13112001001",  # 二子玉川1丁目
+    survey_year=2024
+)
+
+print(data)
+```
+
+### データ変換例
+
+```python
+from src.converters.kokudo_converter import KokudoLandPriceConverter
+import pandas as pd
+
+# CSVデータ読み込み
+df = pd.read_csv("data/processed/master/kokudo_land_price_2024_13.csv")
+
+# 変換
+converter = KokudoLandPriceConverter()
+records = converter.convert_dataframe(df)
+
+print(f"Converted {len(records)} records")
+```
+
+---
+
+## 🐛 トラブルシューティング
+
+### データベース接続エラー
+
+```bash
+# エラー: psycopg2.OperationalError: could not connect to server
+# 解決策: 環境変数を確認
+echo $DB_PASSWORD
+echo $DB_HOST
+
+# または、.envファイルを確認
+cat .env
+```
+
+### GMLファイル読み込みエラー
+
+```bash
+# エラー: No GML file found
+# 解決策: ダウンロードURLを確認（年度によってURLが変わる可能性あり）
+# src/collectors/kokudo_collector.py の _build_download_url() を確認
+```
+
+---
+
+## 📚 参考資料
+
+- [国土数値情報（国土交通省）](https://nlftp.mlit.go.jp/ksj/)
+- [東京都オープンデータ](https://www.opendata.metro.tokyo.lg.jp/)
+- [e-Stat（政府統計ポータル）](https://www.e-stat.go.jp/)
+- [PostgreSQL Documentation](https://www.postgresql.org/docs/)
+- [Anthropic Claude API](https://docs.anthropic.com/)
+
+---
+
+## 📄 ライセンス
 
 MIT License
 
 ---
 
-## 10. お問い合わせ
+## 👥 コントリビューター
 
-質問や提案がある場合は、Issueを作成してください。
+プロジェクト開発者: [Your Name]
+
+---
+
+**Phase 1データ基盤構築完了！次のステップでデータ分析・記事生成機能を統合予定** 🚀

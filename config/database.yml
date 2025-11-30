@@ -1,0 +1,19 @@
+# Database Configuration
+# 環境変数から値を読み込む場合は ${VARIABLE_NAME} 形式で指定
+
+postgresql:
+  host: ${DB_HOST:-localhost}
+  port: ${DB_PORT:-5432}
+  database: ${DB_NAME:-real_estate_dev}
+  user: ${DB_USER:-postgres}
+  password: ${DB_PASSWORD}
+
+# Connection pool settings (optional)
+pool:
+  min_connections: 2
+  max_connections: 10
+  timeout: 30
+
+# SQLite (for local testing)
+sqlite:
+  database: ${SQLITE_DB:-data/local_test.db}

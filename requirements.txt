@@ -1,7 +1,36 @@
+# Database
+psycopg2-binary==2.9.9
+SQLAlchemy==2.0.23
+
+# Data Processing
+pandas==2.1.4
+geopandas==0.14.1
+numpy==1.26.2
+
+# API Clients
+requests==2.31.0
 anthropic>=0.40.0
+
+# Configuration Management
 pyyaml>=6.0
 python-dotenv>=1.0.0
-pandas>=2.0.0
+
+# Data Validation
+pydantic==2.5.3
+
+# Graph Generation
 matplotlib>=3.7.0
-requests>=2.31.0
+plotly==5.18.0
+
+# Markdown Processing
 markdown>=3.5.0
+
+# Logging
+loguru==0.7.2
+
+# Testing
+pytest==7.4.3
+pytest-cov==4.1.0
+
+# Address Normalization (future)
+# jageocoder==2.1.4
