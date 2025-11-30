@@ -10,6 +10,7 @@ class Area:
     choume: str
     priority: str  # high/medium/low
     status: str = "pending"  # pending/processing/completed
+    choume_code: Optional[str] = None  # 町丁目コード（11桁）
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

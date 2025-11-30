@@ -33,7 +33,7 @@ class ContentGenerator:
         data: Dict[str, Any]
     ) -> str:
         """
-        記事生成（固定セクション方式）
+        記事生成（Phase 2対応：プロンプトファイル使用）
         
         Args:
             area: エリア情報
@@ -55,32 +55,268 @@ class ContentGenerator:
             )
             logger.info(f"Generated price graph: {price_graph_filename}")
         
-        # Step 2: データセクション生成（コード）
-        kokudo_section = self._generate_kokudo_section(data)
-        score_section = self._generate_score_section(score, data)
+        # Step 2: データ変数を準備（Phase 2対応）
+        prompt_data = self._prepare_prompt_data(area, score, data, price_graph_filename)
         
-        # Step 3: LLM生成（3セクション）
-        llm_intro = self._generate_intro(area, score, data)
-        llm_analysis = self._generate_analysis(area, data)
-        llm_conclusion = self._generate_conclusion(area, data)
+        # Step 3: プロンプトファイルを読み込んで変数展開
+        # アウトライン生成
+        outline = self._generate_outline(prompt_data)
         
-        # Step 4: 用語解説（定型文）
-        glossary = self._generate_glossary(data)
+        # 本文生成
+        content = self._generate_content(prompt_data, outline)
         
-        # Step 5: テンプレート結合
-        article = self._build_article(
-            area=area,
-            price_graph_filename=price_graph_filename,
-            kokudo_section=kokudo_section,
-            score_section=score_section,
-            llm_intro=llm_intro,
-            llm_analysis=llm_analysis,
-            glossary=glossary,
-            llm_conclusion=llm_conclusion
+        logger.info(f"Generated article: {len(content)} characters")
+        return content
+    
+    def _prepare_prompt_data(
+        self,
+        area: Area,
+        score: ScoreResult,
+        data: Dict[str, Any],
+        chart_path: str = ""
+    ) -> Dict[str, Any]:
+        """
+        プロンプトに渡すデータを準備（Phase 2対応）
+        
+        Args:
+            area: エリア情報
+            score: スコア
+            data: 収集データ
+            chart_path: グラフファイルパス
+        
+        Returns:
+            Dict: プロンプトデータ
+        """
+        # 地価履歴データ
+        price_history = data.get('land_price_history', [])
+        
+        # データ年数を計算
+        data_years = len(price_history) if price_history else 0
+        oldest_year = price_history[0]['year'] if price_history else 0
+        latest_year = price_history[-1]['year'] if price_history else 0
+        
+        # 最古の価格
+        oldest_price = price_history[0]['price'] if price_history else 0
+        
+        # 価格帯の計算
+        point_count = data.get('latest_point_count', 1)
+        price_min = data.get('latest_price_min', data.get('latest_price', 0))
+        price_max = data.get('latest_price_max', data.get('latest_price', 0))
+        price_avg = data.get('latest_price', 0)
+        
+        # 価格帯の幅（倍率）
+        price_ratio = price_max / price_min if price_min > 0 else 1.0
+        
+        # 長期変動率（26年 or 5年）
+        price_change_long = data.get('price_change_26y', 
+                                     data.get('price_change_5y', 0))
+        
+        # プロンプトデータ
+        prompt_data = {
+            # 基本情報
+            'ward': area.ward,
+            'choume': area.choume,
+            'asset_value_score': score.asset_value_score,
+            
+            # データ期間情報
+            'data_years': data_years,
+            'oldest_year': oldest_year,
+            'latest_year': latest_year,
+            'oldest_price': oldest_price,
+            
+            # 価格情報
+            'price_avg': price_avg,
+            'price_min': price_min,
+            'price_max': price_max,
+            'price_ratio': price_ratio,
+            'point_count': point_count,
+            
+            # 変動率
+            'price_change_long': price_change_long,
+            'price_change_5y': data.get('price_change_5y', 0),
+            'price_change_1y': data.get('price_change_1y', 0),
+            
+            # 地価履歴（グラフ用）
+            'land_price_history': price_history,
+            
+            # 国土数値情報
+            'land_use': data.get('land_use', ''),
+            'building_coverage_ratio': data.get('building_coverage_ratio', 0),
+            'floor_area_ratio': data.get('floor_area_ratio', 0),
+            'road_direction': data.get('road_direction', ''),
+            'road_width': data.get('road_width', 0),
+            'land_area': data.get('land_area', 0),
+            'nearest_station': data.get('nearest_station', ''),
+            'station_distance': data.get('station_distance', 0),
+            
+            # グラフパス
+            'chart_path': chart_path,
+        }
+        
+        return prompt_data
+    
+    def _load_prompt_file(self, filename: str) -> str:
+        """
+        プロンプトファイルを読み込む
+        
+        Args:
+            filename: プロンプトファイル名（例: 'persona.txt'）
+        
+        Returns:
+            str: プロンプト内容
+        """
+        prompt_path = self.prompts_dir / filename
+        if not prompt_path.exists():
+            logger.warning(f"Prompt file not found: {prompt_path}")
+            return ""
+        
+        with open(prompt_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    
+    def _expand_template(self, template: str, data: Dict[str, Any]) -> str:
+        """
+        テンプレート内の変数を展開
+        
+        Args:
+            template: テンプレート文字列
+            data: 変数データ
+        
+        Returns:
+            str: 展開後の文字列
+        """
+        import re
+        
+        # 変数を展開（{変数名} または {変数名:フォーマット}形式）
+        pattern = r'\{(\w+)(?::([^}]+))?\}'
+        
+        def replace_match(match):
+            var_name = match.group(1)
+            format_spec = match.group(2) if match.group(2) else None
+            
+            if var_name in data:
+                value = data[var_name]
+                
+                # フォーマット指定がある場合
+                if format_spec:
+                    try:
+                        # カスタムフォーマット（例: {price_avg:,}）
+                        if format_spec == ',':
+                            if isinstance(value, (int, float)):
+                                return f"{value:,.0f}"
+                        elif format_spec.startswith('+'):
+                            # 変動率フォーマット（例: {price_change_long:+.1f}）
+                            if isinstance(value, (int, float)):
+                                return f"{value:+.1f}" if value >= 0 else f"{value:.1f}"
+                        else:
+                            # その他のフォーマット
+                            return format_spec.format(value)
+                    except Exception as e:
+                        logger.warning(f"Format error for {var_name}: {e}")
+                        return str(value)
+                else:
+                    # デフォルトフォーマット（変数名から推測）
+                    if isinstance(value, (int, float)):
+                        if 'price' in var_name.lower() and ('min' in var_name.lower() or 'max' in var_name.lower() or 'avg' in var_name.lower() or 'oldest' in var_name.lower()):
+                            # 価格（カンマ区切り）
+                            return f"{value:,.0f}"
+                        elif 'change' in var_name.lower():
+                            # 変動率（+/-記号付き）
+                            return f"{value:+.1f}" if value >= 0 else f"{value:.1f}"
+                        elif 'ratio' in var_name.lower():
+                            # 倍率（小数点1桁）
+                            return f"{value:.1f}"
+                    return str(value)
+            else:
+                logger.warning(f"Variable not found in data: {var_name}")
+                return match.group(0)
+        
+        result = re.sub(pattern, replace_match, template)
+        
+        return result
+    
+    def _generate_outline(self, prompt_data: Dict[str, Any]) -> str:
+        """
+        アウトライン生成（プロンプトファイル使用）
+        
+        Args:
+            prompt_data: プロンプトデータ
+        
+        Returns:
+            str: アウトライン
+        """
+        # プロンプトファイルを読み込み
+        persona = self._load_prompt_file('persona.txt')
+        outline_template = self._load_prompt_file('outline.txt')
+        
+        if not outline_template:
+            logger.error("outline.txt not found")
+            return ""
+        
+        # outline_template用のデータを準備
+        # prompt_dataにpersonaを追加
+        expanded_data = {
+            **prompt_data,
+            'persona': persona  # ペルソナテキスト全体
+        }
+        
+        # テンプレートを一括展開
+        prompt = self._expand_template(outline_template, expanded_data)
+        
+        # LLMで生成
+        response = self.llm.generate(
+            prompt=prompt,
+            max_tokens=2000,
+            temperature=0.7
         )
         
-        logger.info(f"Generated article: {len(article)} characters")
-        return article
+        return response.strip()
+    
+    def _generate_content(self, prompt_data: Dict[str, Any], outline: str) -> str:
+        """
+        本文生成（プロンプトファイル使用）
+        
+        Args:
+            prompt_data: プロンプトデータ
+            outline: 生成されたアウトライン
+        
+        Returns:
+            str: 本文
+        """
+        # プロンプトファイルを読み込み
+        persona = self._load_prompt_file('persona.txt')
+        content_template = self._load_prompt_file('content.txt')
+        
+        if not content_template:
+            logger.error("content.txt not found")
+            return ""
+        
+        # データ情報を文字列化（汎用的な変数展開）
+        data_text = f"""- 期間: {prompt_data['data_years']}年分（{prompt_data['oldest_year']}-{prompt_data['latest_year']}年）
+- 平均地価: {prompt_data['price_avg']:,}円/㎡
+- 価格帯: {prompt_data['price_min']:,}〜{prompt_data['price_max']:,}円/㎡（{prompt_data['point_count']}地点）
+- {prompt_data['data_years']}年変動: {prompt_data['price_change_long']:+.1f}%
+- 資産価値スコア: {prompt_data['asset_value_score']}/100"""
+        
+        # content_template用のデータを準備
+        # 既存のprompt_dataに、persona, outline, dataを追加
+        expanded_data = {
+            **prompt_data,      # 既存のデータ（ward, choume, 価格情報など）
+            'persona': persona, # ペルソナテキスト全体
+            'outline': outline, # 生成されたアウトライン全体
+            'data': data_text   # データ情報（整形済み文字列）
+        }
+        
+        # テンプレートを一括展開
+        prompt = self._expand_template(content_template, expanded_data)
+        
+        # LLMで生成
+        response = self.llm.generate(
+            prompt=prompt,
+            max_tokens=8000,
+            temperature=0.7
+        )
+        
+        return response.strip()
     
     def _generate_intro(self, area: Area, score: ScoreResult, data: Dict) -> str:
         """イントロ生成（LLM 500文字）"""

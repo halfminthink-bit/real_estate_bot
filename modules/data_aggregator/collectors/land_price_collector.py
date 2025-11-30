@@ -56,44 +56,52 @@ class LandPriceCollector(BaseCollector):
 
     def fetch(self, area: Area) -> Dict[str, Any]:
         """
-        地価データを取得
-
+        地価データを取得（26年分・平均値+価格帯）
+        
         Returns:
             {
-                'land_price_history': List[Dict],
-                'latest_price': int,
+                'land_price_history': List[Dict],  # 平均値・最小・最大・地点数
+                'latest_price': int,               # 最新年の平均
+                'latest_price_min': int,           # 最新年の最小
+                'latest_price_max': int,           # 最新年の最大
+                'latest_point_count': int,         # 最新年の地点数
+                'price_change_26y': float,
                 'price_change_5y': float,
                 'price_change_1y': float,
-                'data_source': str
+                'data_source': str,
+                ...
             }
         """
         try:
             conn = psycopg2.connect(**self.db_config)
             cursor = conn.cursor()
 
-            # 住所パターンを作成（例: "松原5丁目" -> "松原5丁目"）
-            # 全角・半角対応のため、半角で統一
+            # 町丁目名から検索パターン作成（例: "三軒茶屋1丁目%"）
             choume_normalized = area.choume.translate(str.maketrans('０１２３４５６７８９', '0123456789'))
-            search_pattern = f"%{choume_normalized}%"
-
-            # 5年分のデータを取得（国土数値情報のフィールドも含む）
-            # 全角・半角対応でマッチング
+            search_pattern = f"{choume_normalized}%"
+            
+            # 年度別の平均・最小・最大・地点数を取得
             cursor.execute('''
                 SELECT 
-                    survey_year, 
-                    official_price, 
-                    year_on_year_change, 
-                    original_address,
-                    land_use,
-                    building_coverage_ratio,
-                    floor_area_ratio,
-                    road_direction,
-                    road_width,
-                    land_area,
-                    nearest_station,
-                    station_distance
-                FROM land_prices
+                    survey_year,
+                    COUNT(*) as point_count,
+                    AVG(official_price)::INTEGER as avg_price,
+                    MIN(official_price) as min_price,
+                    MAX(official_price) as max_price,
+                    -- 国土数値情報は最新年から取得
+                    MAX(CASE WHEN land_use IS NOT NULL THEN land_use END) as land_use,
+                    MAX(CASE WHEN building_coverage_ratio IS NOT NULL THEN building_coverage_ratio END) as building_coverage_ratio,
+                    MAX(CASE WHEN floor_area_ratio IS NOT NULL THEN floor_area_ratio END) as floor_area_ratio,
+                    MAX(CASE WHEN road_direction IS NOT NULL THEN road_direction END) as road_direction,
+                    MAX(CASE WHEN road_width IS NOT NULL THEN road_width END) as road_width,
+                    MAX(CASE WHEN land_area IS NOT NULL THEN land_area END) as land_area,
+                    MAX(CASE WHEN nearest_station IS NOT NULL THEN nearest_station END) as nearest_station,
+                    MAX(CASE WHEN station_distance IS NOT NULL THEN station_distance END) as station_distance,
+                    -- 代表的な住所（最初の1件）
+                    MIN(original_address) as sample_address
+                FROM land_prices_kokudo
                 WHERE TRANSLATE(original_address, '０１２３４５６７８９', '0123456789') LIKE %s
+                GROUP BY survey_year
                 ORDER BY survey_year
             ''', (search_pattern,))
 
@@ -105,52 +113,74 @@ class LandPriceCollector(BaseCollector):
                 conn.close()
                 return {}
 
-            # データを整形
+            # データ整形（変動率を計算）
             history = []
-            for row in rows:
+            for i, row in enumerate(rows):
+                # 前年比変動率（平均値で計算）
+                change = 0.0
+                if i > 0:
+                    prev_avg = rows[i-1][2]  # 前年の平均
+                    curr_avg = row[2]         # 今年の平均
+                    if prev_avg and prev_avg > 0:
+                        change = ((curr_avg - prev_avg) / prev_avg) * 100
+
                 history.append({
                     'year': row[0],
-                    'price': row[1],
-                    'change': row[2],
-                    'address': row[3] if len(row) > 3 else None
+                    'price': row[2],           # 平均価格
+                    'price_min': row[3],       # 最小価格
+                    'price_max': row[4],       # 最大価格
+                    'point_count': row[1],     # 地点数
+                    'change': change,
+                    'address': row[13]
                 })
 
             latest = rows[-1]
             oldest = rows[0]
-            price_change_5y = ((latest[1] - oldest[1]) / oldest[1]) * 100 if oldest[1] > 0 else 0
-            price_change_1y = latest[2] if latest[2] else 0
 
-            # 最新年のデータから国土数値情報を取得（2021年データがあれば優先）
-            kokudo_data = None
-            for row in reversed(rows):  # 最新年から遡って探す
-                if len(row) > 4 and row[4] is not None:  # land_useが存在
-                    kokudo_data = {
-                        'land_use': row[4],
-                        'building_coverage_ratio': row[5],
-                        'floor_area_ratio': row[6],
-                        'road_direction': row[7],
-                        'road_width': row[8],
-                        'land_area': row[9],
-                        'nearest_station': row[10],
-                        'station_distance': row[11]
-                    }
-                    break
+            # 26年間の変動率（平均値で計算）
+            price_change_26y = ((latest[2] - oldest[2]) / oldest[2]) * 100 if oldest[2] and oldest[2] > 0 else 0
+
+            # 5年間の変動率
+            price_change_5y = 0.0
+            if len(rows) >= 5:
+                five_years_ago = rows[-5]
+                price_change_5y = ((latest[2] - five_years_ago[2]) / five_years_ago[2]) * 100 if five_years_ago[2] and five_years_ago[2] > 0 else 0
+
+            # 1年間の変動率
+            price_change_1y = 0.0
+            if len(rows) >= 2:
+                prev = rows[-2]
+                price_change_1y = ((latest[2] - prev[2]) / prev[2]) * 100 if prev[2] and prev[2] > 0 else 0
+
+            # 国土数値情報（最新年）
+            kokudo_data = {
+                'land_use': latest[5],
+                'building_coverage_ratio': latest[6],
+                'floor_area_ratio': latest[7],
+                'road_direction': latest[8],
+                'road_width': latest[9],
+                'land_area': latest[10],
+                'nearest_station': latest[11],
+                'station_distance': latest[12]
+            }
 
             result = {
                 'land_price_history': history,
-                'latest_price': latest[1],
+                'latest_price': latest[2],            # 平均価格
+                'latest_price_min': latest[3],      # 最小価格
+                'latest_price_max': latest[4],      # 最大価格
+                'latest_point_count': latest[1],    # 地点数
+                'price_change_26y': price_change_26y,
                 'price_change_5y': price_change_5y,
                 'price_change_1y': price_change_1y,
-                'data_source': 'tokyo_opendata',
-                'original_address': latest[3] if len(latest) > 3 else None
+                'data_source': '地価公示',
+                'original_address': latest[13],
+                **kokudo_data
             }
 
-            # 国土数値情報を追加
-            if kokudo_data:
-                result.update(kokudo_data)
-
             logger.info(f"Fetched land price data for {area.choume}: "
-                       f"{len(history)} years, latest={latest[1]:,}円/㎡, 用途地域={kokudo_data.get('land_use', 'なし') if kokudo_data else 'なし'}")
+                       f"{len(history)} years, {latest[1]} points, "
+                       f"avg={latest[2]:,}円/㎡ (range: {latest[3]:,}-{latest[4]:,})")
 
             cursor.close()
             conn.close()
@@ -160,18 +190,4 @@ class LandPriceCollector(BaseCollector):
         except Exception as e:
             logger.error(f"Error fetching land price data for {area.choume}: {e}", exc_info=True)
             return {}
-
-    def _create_search_pattern(self, choume: str) -> str:
-        """
-        町丁目名から検索パターンを作成
-
-        Args:
-            choume: 町丁目名（例: "松原5丁目"）
-
-        Returns:
-            検索パターン（例: "松原５丁目%"）
-        """
-        # 半角数字を全角に変換
-        choume_fullwidth = choume.translate(str.maketrans('0123456789', '０１２３４５６７８９'))
-        return f"{choume_fullwidth}%"
 

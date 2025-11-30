@@ -8,13 +8,16 @@ Write-Host ("=" * 60)
 # Settings
 $downloadFolder = "$env:USERPROFILE\Downloads"
 $targetFolder = "data\raw\national\kokudo_suuchi"
-$years = @(
-    @{Year=2025; File="L01-25_13_GML.zip"},
-    @{Year=2024; File="L01-24_13_GML.zip"},
-    @{Year=2023; File="L01-23_13_GML.zip"},
-    @{Year=2022; File="L01-22_13_GML.zip"},
-    @{Year=2021; File="L01-21_13_GML.zip"}
-)
+
+# Generate years array from 2000 to 2020 (L01-00 to L01-20)
+# Note: 2021-2025 are already processed
+$years = @()
+for ($year = 2000; $year -le 2020; $year++) {
+    $yearCode = $year - 2000
+    $yearCodeStr = $yearCode.ToString("00")
+    $fileName = "L01-$yearCodeStr`_13_GML.zip"
+    $years += @{Year=$year; File=$fileName}
+}
 
 # Step 1: Create folder
 Write-Host "`n[Step 1] Create folder" -ForegroundColor Cyan

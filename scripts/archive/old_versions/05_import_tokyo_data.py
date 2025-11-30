@@ -2,7 +2,7 @@ import pandas as pd
 import psycopg2
 from pathlib import Path
 from loguru import logger
-from datetime import date
+from datetime import date, datetime
 import re
 
 # DB接続設定
@@ -53,14 +53,14 @@ def load_tokyo_csv(csv_path: Path, year: int):
     encodings = ['cp932', 'shift-jis', 'utf-8']
     df = None
     
+    # 2021-2023年はタイトル行なし、それ以外はタイトル行あり
+    skiprows = 0 if 2021 <= year <= 2023 else 1
+    
     for enc in encodings:
         try:
-            # 2025年と2024年はskiprows=1が必要
-            if year >= 2024:
-                df = pd.read_csv(csv_path, encoding=enc, skiprows=1)
-            else:
-                df = pd.read_csv(csv_path, encoding=enc)
+            df = pd.read_csv(csv_path, encoding=enc, skiprows=skiprows)
             logger.info(f'✅ 読み込み成功（{enc}）: {len(df)} 件')
+            logger.info(f'   年度: {year}, skiprows: {skiprows}')
             break
         except Exception as e:
             continue
@@ -222,17 +222,40 @@ def insert_to_db(records: list):
     logger.info(f'✅ インポート完了: 成功 {success_count} 件、エラー {error_count} 件')
 
 def main():
+    # ログファイルの設定
+    log_dir = Path('logs')
+    log_dir.mkdir(exist_ok=True)
+    log_file = log_dir / f'import_tokyo_data_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'
+    
+    # 既存のハンドラーを削除してから新しいハンドラーを追加
+    logger.remove()
+    logger.add(
+        log_file,
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}",
+        level="INFO",
+        encoding="utf-8"
+    )
+    logger.add(
+        lambda msg: print(msg, end=""),  # コンソールにも出力
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}",
+        level="INFO"
+    )
+    
     logger.info('=' * 60)
     logger.info('東京都オープンデータ インポート')
+    logger.info(f'ログファイル: {log_file}')
     logger.info('=' * 60)
     
-    # 5年分をインポート
+    # 8年分をインポート
     years = [
         (2025, 'tokyo_land_price_2025.csv'),
         (2024, 'tokyo_land_price_2024.csv'),
         (2023, 'tokyo_land_price_2023.csv'),
         (2022, 'tokyo_land_price_2022.csv'),
         (2021, 'tokyo_land_price_2021.csv'),
+        (2020, 'tokyo_land_price_2020.csv'),
+        (2019, 'tokyo_land_price_2019.csv'),
+        (2018, 'tokyo_land_price_2018.csv'),
     ]
     
     base_dir = Path('data/raw/prefecture/tokyo')

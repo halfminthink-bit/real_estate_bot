@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-国土数値情報（2021-2025年版）インポート修正版
+国土数値情報（2018-2025年版）インポート修正版
 
 各年度のGeoJSONフィールド構造に対応
 """
@@ -39,6 +39,46 @@ LAND_USE_MAP = {
 
 # 年度別フィールドマッピング
 FIELD_MAPPING = {
+    # 2018-2021年は同じフィールド構造
+    2018: {
+        'city_code': 'L01_021',      # 市区町村コード
+        'city_name': 'L01_022',      # 市区町村名
+        'address': 'L01_023',        # 住所
+        'land_area': 'L01_024',      # 地積
+        'road_direction': 'L01_037', # 前面道路方位
+        'road_width': 'L01_038',     # 前面道路幅員
+        'nearest_station': 'L01_045',# 最寄駅
+        'station_distance': 'L01_046',# 駅距離
+        'land_use': 'L01_047',       # 用途地域
+        'building_coverage': 'L01_052', # 建蔽率
+        'floor_area_ratio': 'L01_053',  # 容積率
+    },
+    2019: {
+        'city_code': 'L01_021',      # 市区町村コード
+        'city_name': 'L01_022',      # 市区町村名
+        'address': 'L01_023',        # 住所
+        'land_area': 'L01_024',      # 地積
+        'road_direction': 'L01_037', # 前面道路方位
+        'road_width': 'L01_038',     # 前面道路幅員
+        'nearest_station': 'L01_045',# 最寄駅
+        'station_distance': 'L01_046',# 駅距離
+        'land_use': 'L01_047',       # 用途地域
+        'building_coverage': 'L01_052', # 建蔽率
+        'floor_area_ratio': 'L01_053',  # 容積率
+    },
+    2020: {
+        'city_code': 'L01_021',      # 市区町村コード
+        'city_name': 'L01_022',      # 市区町村名
+        'address': 'L01_023',        # 住所
+        'land_area': 'L01_024',      # 地積
+        'road_direction': 'L01_037', # 前面道路方位
+        'road_width': 'L01_038',     # 前面道路幅員
+        'nearest_station': 'L01_045',# 最寄駅
+        'station_distance': 'L01_046',# 駅距離
+        'land_use': 'L01_047',       # 用途地域
+        'building_coverage': 'L01_052', # 建蔽率
+        'floor_area_ratio': 'L01_053',  # 容積率
+    },
     2021: {
         'city_code': 'L01_021',      # 市区町村コード
         'city_name': 'L01_022',      # 市区町村名
@@ -140,6 +180,23 @@ def normalize_address(address):
     # 「世田谷区」を削除
     if '世田谷区' in address:
         address = address.split('世田谷区')[1]
+    
+    # 全角ハイフン・マイナスを半角ハイフンに統一
+    # 2018-2021年のGeoJSONは「－」（全角ハイフン）や「−」（全角マイナス）を使用
+    address = address.replace('－', '-').replace('−', '-').replace('‐', '-')
+    
+    # ハイフン形式を丁目番形式に変換
+    # 例: 「喜多見9-19-6」→「喜多見9丁目19番6」
+    parts = re.split(r'[-]', address)
+    if len(parts) == 3:
+        # 3分割された場合：町名-丁目-番地
+        address = f"{parts[0]}丁目{parts[1]}番{parts[2]}"
+    elif len(parts) == 2:
+        # 2分割された場合：町名-番地
+        address = f"{parts[0]}番{parts[1]}"
+    
+    # 「外」を削除（マッチングのため）
+    address = address.replace('外', '')
     
     return address.strip()
 
@@ -402,13 +459,16 @@ def verify_import():
 def main():
     """メイン処理"""
     print("=" * 60)
-    print("国土数値情報（2021-2025年版）インポート修正版")
+    print("国土数値情報（2018-2025年版）インポート修正版")
     print("=" * 60)
     
     # GeoJSONファイルのパス
     base_path = project_root / "data" / "raw" / "national" / "kokudo_suuchi"
     
     geojson_files = {
+        2018: base_path / "2018_13" / "L01-18_13_GML" / "L01-18_13.geojson",
+        2019: base_path / "2019_13" / "L01-19_13.geojson",
+        2020: base_path / "2020_13" / "L01-20_13_GML" / "L01-20_13.geojson",
         2021: base_path / "2021_13" / "L01-21_13_GML" / "L01-21_13.geojson",
         2022: base_path / "2022_13" / "L01-22_13.geojson",
         2023: base_path / "2023_13" / "L01-23_13_GML" / "L01-23_13.geojson",
@@ -436,7 +496,7 @@ def main():
     # 各年度のデータをインポート
     total_updated = 0
     
-    for year in [2021, 2022, 2023, 2024, 2025]:
+    for year in [2025, 2024, 2023, 2022, 2021, 2020, 2019, 2018]:
         geojson_path = geojson_files[year]
         
         if not geojson_path.exists():

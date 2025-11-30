@@ -15,7 +15,13 @@ $files = @(
     @{Year=2024; Pattern="R6kouji_chiten_data.csv"; Target="tokyo_land_price_2024.csv"},
     @{Year=2023; Pattern="R5kouji_chiten_data__3.csv"; Target="tokyo_land_price_2023.csv"},
     @{Year=2022; Pattern="R4kouji_chiten_data__3.csv"; Target="tokyo_land_price_2022.csv"},
-    @{Year=2021; Pattern="R3kouji_chiten_data__3.csv"; Target="tokyo_land_price_2021.csv"}
+    @{Year=2021; Pattern="R3kouji_chiten_data__3.csv"; Target="tokyo_land_price_2021.csv"},
+    @{Year=2020; Pattern="R2kouji_chiten_data__3"; Target="tokyo_land_price_2020.csv"},
+    @{Year=2019; Pattern="31kouji_chiten_data__3.csv"; Target="tokyo_land_price_2019.csv"},
+    @{Year=2018; Pattern="30kouji_chiten_data__3.csv"; Target="tokyo_land_price_2018.csv"},
+    @{Year=2017; Pattern="29kouji_chiten_data__3.csv"; Target="tokyo_land_price_2017.csv"},
+    @{Year=2016; Pattern="28kouji_chiten_data__3.csv"; Target="tokyo_land_price_2016.csv"},
+    @{Year=2015; Pattern="27kouji_chiten_data__3.csv"; Target="tokyo_land_price_2015.csv"}
 )
 
 # Step 1: Create folder
@@ -27,8 +33,15 @@ Write-Host "  OK: Created $targetFolder"
 Write-Host "`n[Step 2] Move CSV files" -ForegroundColor Cyan
 $movedCount = 0
 foreach ($item in $files) {
-    # Try to find file with pattern
-    $sourceFiles = Get-ChildItem -Path $downloadFolder -Filter "*$($item.Pattern.Split('_')[0])*" -ErrorAction SilentlyContinue
+    # Extract base pattern (remove .csv extension if present, and get main part)
+    $basePattern = $item.Pattern
+    if ($basePattern.EndsWith('.csv')) {
+        $basePattern = $basePattern.Substring(0, $basePattern.Length - 4)
+    }
+    
+    # Try to find file with pattern (handles files with (1), (2), etc.)
+    $searchPattern = "*$basePattern*.csv"
+    $sourceFiles = Get-ChildItem -Path $downloadFolder -Filter $searchPattern -ErrorAction SilentlyContinue
     
     if ($sourceFiles) {
         $sourceFile = $sourceFiles[0].FullName
@@ -36,7 +49,7 @@ foreach ($item in $files) {
         
         if (Test-Path $sourceFile) {
             Copy-Item -Path $sourceFile -Destination $targetFile -Force
-            Write-Host "  OK: Moved $($item.Pattern) -> $($item.Target)"
+            Write-Host "  OK: Moved $($sourceFiles[0].Name) -> $($item.Target)"
             $movedCount++
         }
     } else {
