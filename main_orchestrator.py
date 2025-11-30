@@ -15,6 +15,7 @@ from core.orchestrator import Orchestrator
 from modules.data_aggregator.aggregator import DataAggregator
 from modules.data_aggregator.collectors.crime_collector import CrimeCollector
 from modules.data_aggregator.collectors.population_collector import PopulationCollector
+from modules.data_aggregator.collectors.resas_collector import RESASCollector
 from modules.score_calculator.calculator import ScoreCalculator
 from modules.chart_generator.generator import ChartGenerator
 from modules.content_generator.generator import ContentGenerator
@@ -91,7 +92,8 @@ def main():
         # データ収集モジュール
         crime_collector = CrimeCollector(config.data_dir / 'crime_data.csv')
         population_collector = PopulationCollector()
-        data_aggregator = DataAggregator([crime_collector, population_collector])
+        resas_collector = RESASCollector()
+        data_aggregator = DataAggregator([crime_collector, population_collector, resas_collector])
 
         # スコア計算モジュール
         score_calculator = ScoreCalculator(config.get_scoring_rules_path())

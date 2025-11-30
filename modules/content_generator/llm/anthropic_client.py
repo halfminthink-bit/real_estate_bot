@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 class AnthropicClient(BaseLLMClient):
     """Claude API クライアント"""
 
-    def __init__(self, api_key: str, model: str = "claude-sonnet-4-5-20250929"):
+    def __init__(self, api_key: str, model: str = "claude-haiku-4-5"):
         if not api_key:
             raise ValueError("API key is required")
 

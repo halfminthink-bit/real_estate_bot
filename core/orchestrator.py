@@ -17,6 +17,9 @@ class Orchestrator:
         self.data_manager = CSVDataManager(config.data_dir)
         self.logger = logging.getLogger(__name__)
 
+        # 処理したarea_idを保持
+        self.processed_area_ids = []
+
         # 各モジュールは後で初期化
         self.data_aggregator = None
         self.score_calculator = None
@@ -56,6 +59,9 @@ class Orchestrator:
         """データ収集パイプライン"""
         self.logger.info("=== Data Collection Phase ===")
 
+        # 処理したarea_idをリセット
+        self.processed_area_ids = []
+
         # 未処理の町丁目を取得
         areas = self.data_manager.get_pending_areas(limit)
         self.logger.info(f"Found {len(areas)} pending areas")
@@ -83,6 +89,7 @@ class Orchestrator:
                     self.logger.info(f"Calculated score: Total={score.total_score}")
 
                 self.data_manager.update_area_status(area.area_id, "completed")
+                self.processed_area_ids.append(area.area_id)
 
             except Exception as e:
                 self.logger.error(f"Error processing area {area.area_id}: {e}", exc_info=True)
@@ -92,8 +99,19 @@ class Orchestrator:
         """記事生成パイプライン"""
         self.logger.info("=== Content Generation Phase ===")
 
-        # 完了した町丁目を取得
-        areas = self.data_manager.get_pending_areas(limit)
+        # データ収集フェーズで処理したareaを取得
+        if not self.processed_area_ids:
+            # generate_onlyモードの場合、スコアが存在するareaを取得
+            self.logger.info("No areas processed in data collection phase, looking for areas with scores")
+            areas = self.data_manager.get_pending_areas(limit)
+        else:
+            # 処理したarea_idからareaを取得
+            areas = []
+            for area_id in self.processed_area_ids:
+                area = self.data_manager.get_area_by_id(area_id)
+                if area:
+                    areas.append(area)
+            self.logger.info(f"Found {len(areas)} areas with scores")
 
         for area in areas:
             try:

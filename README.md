@@ -53,16 +53,16 @@ cp .env.example .env
 
 ```bash
 # データ収集のみ実行（APIキー不要）
-python main_orchestrator.py \
-  --project projects/setagaya_real_estate/config.yml \
-  --mode data_only \
+python main_orchestrator.py 
+  --project projects/setagaya_real_estate/config.yml 
+  --mode data_only 
   --limit 5
 
 # 全パイプライン実行（記事生成まで）
-python main_orchestrator.py \
-  --project projects/setagaya_real_estate/config.yml \
-  --mode full \
-  --limit 5
+python main_orchestrator.py 
+  --project projects/setagaya_real_estate/config.yml 
+  --mode full 
+  --limit 1
 ```
 
 ### 2.3. 生成された記事を確認
