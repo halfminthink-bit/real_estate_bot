@@ -14,6 +14,7 @@ from core.config import ProjectConfig
 from core.orchestrator import Orchestrator
 from modules.data_aggregator.aggregator import DataAggregator
 from modules.data_aggregator.collectors.crime_collector import CrimeCollector
+from modules.data_aggregator.collectors.land_price_collector import LandPriceCollector
 from modules.data_aggregator.collectors.population_collector import PopulationCollector
 from modules.data_aggregator.collectors.resas_collector import RESASCollector
 from modules.score_calculator.calculator import ScoreCalculator
@@ -90,10 +91,27 @@ def main():
         logger.info("Initializing modules...")
 
         # データ収集モジュール
-        crime_collector = CrimeCollector(config.data_dir / 'crime_data.csv')
+        collectors = []
+        
+        # 犯罪データCollector
+        crime_data_path = config.data_dir / 'crime_data.csv'
+        if crime_data_path.exists():
+            crime_collector = CrimeCollector(crime_data_path)
+            collectors.append(crime_collector)
+            logger.info("Added CrimeCollector")
+        
+        # 地価データCollector（PostgreSQL）
+        land_price_collector = LandPriceCollector()
+        collectors.append(land_price_collector)
+        logger.info("Added LandPriceCollector")
+        
+        # その他のCollector（Phase 2用）
         population_collector = PopulationCollector()
         resas_collector = RESASCollector()
-        data_aggregator = DataAggregator([crime_collector, population_collector, resas_collector])
+        collectors.extend([population_collector, resas_collector])
+        
+        data_aggregator = DataAggregator(collectors)
+        logger.info(f"Initialized DataAggregator with {len(collectors)} collectors")
 
         # スコア計算モジュール
         score_calculator = ScoreCalculator(config.get_scoring_rules_path())

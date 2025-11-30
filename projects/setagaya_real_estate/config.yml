@@ -1,37 +1,16 @@
 project:
   name: "setagaya_real_estate"
-  version: "1.0"
-  description: "世田谷区の町丁目レベル住みやすさ記事生成プロジェクト"
+  version: "2.0"
+  description: "世田谷区の町丁目レベル資産価値記事生成プロジェクト（Phase 1.5完成版）"
   target_ward: "世田谷区"
-  target_pages: 5  # Phase 1
 
 data:
   storage_type: "csv"
   csv_dir: "projects/setagaya_real_estate/data"
 
-apis:
-  keishicho:
-    enabled: true
-    description: "警視庁 犯罪統計データ"
-  estat:
-    enabled: false  # Phase 1は無効（Phase 2で実装）
-    description: "e-Stat 人口統計データ"
-  kokudo:
-    enabled: false  # Phase 1は無効（Phase 2で実装）
-    description: "国土交通省 不動産価格データ"
-
-scoring:
-  rules_file: "projects/setagaya_real_estate/scoring_rules.yml"
-  weights:
-    safety: 0.25
-    education: 0.20
-    convenience: 0.20
-    asset_value: 0.20
-    living: 0.15
-
 llm:
   provider: "anthropic"
-  model: "claude-haiku-4-5"
+  model: "claude-sonnet-4-5-20250929"
   temperature: 0.7
   max_tokens: 8000
 

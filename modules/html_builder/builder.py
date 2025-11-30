@@ -31,7 +31,7 @@ class HTMLBuilder:
 
         Args:
             markdown_path: Markdownファイルパス
-            chart_path: レーダーチャート画像パス
+            chart_path: レーダーチャート画像パス（None可、固定セクション方式では不要）
             output_path: 出力HTMLパス
         """
         logger.info(f"Building HTML: {markdown_path} -> {output_path}")
@@ -40,9 +40,29 @@ class HTMLBuilder:
         with open(markdown_path, 'r', encoding='utf-8') as f:
             md_content = f.read()
 
-        # チャート画像挿入
-        chart_html = f'<div class="chart-container"><img src="{chart_path.name}" alt="レーダーチャート"></div>'
-        md_content = md_content.replace('<CHART>', chart_html)
+        # チャート画像挿入（旧方式の<CHART>タグ対応）
+        if '<CHART>' in md_content:
+            if chart_path:
+                chart_html = f'<div class="chart-container"><img src="{chart_path.name}" alt="レーダーチャート"></div>'
+                md_content = md_content.replace('<CHART>', chart_html)
+            else:
+                # chart_pathがNoneの場合は<CHART>タグを削除
+                md_content = md_content.replace('<CHART>', '')
+        
+        # 固定セクション方式では、Markdown内に画像が直接埋め込まれているため
+        # 画像パスをHTMLから見た相対パスに調整
+        # 画像ファイルはchartsディレクトリに、HTMLはhtmlディレクトリに保存される
+        # 相対パス: html/ から charts/ へのパス
+        import re
+        # Markdownの画像記法 ![alt](filename) を検出してパスを調整
+        def adjust_image_path(match):
+            alt_text = match.group(1)
+            image_filename = match.group(2)
+            # HTMLから見た相対パス（html/ から charts/ へのパス）
+            relative_path = f"../charts/{image_filename}"
+            return f"![{alt_text}]({relative_path})"
+        
+        md_content = re.sub(r'!\[([^\]]*)\]\(([^)]+)\)', adjust_image_path, md_content)
 
         # アフィリエイトリンク挿入
         affiliate_html = self._build_affiliate_section()

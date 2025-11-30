@@ -124,14 +124,19 @@ class Orchestrator:
                     continue
 
                 # データを取得
-                crime_data = self.data_manager.get_crime_data(area.area_id)
-                data = crime_data if crime_data else {}
+                data = {}
+                if self.data_aggregator:
+                    # data_aggregatorから全データを取得（地価データ含む）
+                    data = self.data_aggregator.collect(area)
+                else:
+                    # フォールバック: CSVから犯罪データのみ取得
+                    crime_data = self.data_manager.get_crime_data(area.area_id)
+                    if crime_data:
+                        data.update(crime_data)
 
-                # レーダーチャート生成
-                chart_path = None
-                if self.chart_generator:
-                    chart_path = self.chart_generator.generate(area, score)
-                    self.logger.info(f"Generated chart: {chart_path}")
+                # レーダーチャートは使用しない（固定セクション方式では不要）
+                # 価格グラフはContentGenerator内で生成される
+                self.logger.info("Skipping radar chart generation (using price graph instead)")
 
                 # 記事生成
                 markdown_content = None
@@ -145,11 +150,12 @@ class Orchestrator:
                         f.write(markdown_content)
                     self.logger.info(f"Generated markdown: {md_path}")
 
-                    # HTML生成
-                    if self.html_builder and chart_path:
+                    # HTML生成（価格グラフはMarkdown内に埋め込まれている）
+                    if self.html_builder:
                         html_filename = f"{area.ward}{area.choume}.html"
                         html_path = self.config.html_dir / html_filename
-                        self.html_builder.build(md_path, chart_path, html_path)
+                        # chart_pathは不要（Markdown内に画像が埋め込まれている）
+                        self.html_builder.build(md_path, None, html_path)
                         self.logger.info(f"Generated HTML: {html_path}")
 
             except Exception as e:

@@ -1,10 +1,78 @@
+# Environment variables
 .env
+.env.local
+
+# Python
 *.pyc
+*.pyo
+*.pyd
 __pycache__/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+dist/
+build/
+
+# Virtual environments
 .venv/
 venv/
-logs/*.log
-projects/*/data/*.db
+env/
+
+# Logs
+logs/
+*.log
+
+# Data files (large raw data)
+data/raw/
+data/processed/
+
+# Generated output
+output/
 projects/*/output/
 projects/*/charts/
 projects/*/html/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+projects/*/data/*.db
+
+# Temporary/backup files
+*.bak
+*.backup
+*_old.*
+config_old.yml
+projects/*/prompts/backup_old/
+
+# Investigation/analysis files
+*.json
+!requirements.txt
+!package.json
+!package-lock.json
+!tsconfig.json
+
+# CSV files (except config CSVs in projects)
+*.csv
+!projects/*/data/*.csv
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Docker
+.dockerignore

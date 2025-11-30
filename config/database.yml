@@ -1,12 +1,20 @@
 # Database Configuration
-# 環境変数から値を読み込む場合は ${VARIABLE_NAME} 形式で指定
+# Docker Composeで起動するPostgreSQLの設定
 
 postgresql:
-  host: ${DB_HOST:-localhost}
-  port: ${DB_PORT:-5432}
-  database: ${DB_NAME:-real_estate_dev}
-  user: ${DB_USER:-postgres}
-  password: ${DB_PASSWORD}
+  host: localhost
+  port: 5432
+  database: real_estate_dev
+  user: postgres
+  password: postgres
+
+# 環境変数から値を読み込む場合は以下の形式を使用:
+# postgresql:
+#   host: ${DB_HOST:-localhost}
+#   port: ${DB_PORT:-5432}
+#   database: ${DB_NAME:-real_estate_dev}
+#   user: ${DB_USER:-postgres}
+#   password: ${DB_PASSWORD}
 
 # Connection pool settings (optional)
 pool:

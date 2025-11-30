@@ -1,0 +1,48 @@
+{
+  "type": "line",
+  "data": {
+    "labels": [
+      "2021",
+      "2022",
+      "2023",
+      "2024",
+      "2025"
+    ],
+    "datasets": [
+      {
+        "label": "公示地価（円/㎡）",
+        "data": [
+          907000,
+          907000,
+          934000,
+          988000,
+          1090000
+        ],
+        "borderColor": "#4CAF50",
+        "backgroundColor": "rgba(76, 175, 80, 0.1)",
+        "tension": 0.1,
+        "fill": true
+      }
+    ]
+  },
+  "options": {
+    "responsive": true,
+    "plugins": {
+      "title": {
+        "display": true,
+        "text": "地価推移（5年間）"
+      },
+      "legend": {
+        "display": true
+      }
+    },
+    "scales": {
+      "y": {
+        "beginAtZero": false,
+        "ticks": {
+          "callback": "function(value) { return value.toLocaleString() + \"円\"; }"
+        }
+      }
+    }
+  }
+}

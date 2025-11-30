@@ -12,6 +12,9 @@ class ScoreCalculator:
 
     def __init__(self, rules_path: Path):
         self.safety_scorer = SafetyScorer(rules_path)
+        # 資産価値スコア計算器を初期化
+        from .scorers.asset_value_scorer import AssetValueScorer
+        self.asset_value_scorer = AssetValueScorer()
         logger.info("Initialized ScoreCalculator")
 
     def calculate(self, area: Area, data: Dict[str, Any]) -> ScoreResult:
@@ -25,7 +28,7 @@ class ScoreCalculator:
         # Phase 2で実装予定
         education = self._calculate_education_dummy(data)
         convenience = self._calculate_convenience_dummy(data)
-        asset_value = self._calculate_asset_value_dummy(data)
+        asset_value = self._calculate_asset_value(data)
         living = self._calculate_living_dummy(data)
 
         # 総合スコア（5つの平均）
@@ -56,10 +59,14 @@ class ScoreCalculator:
         # Phase 2で駅・店舗データから計算
         return 85
 
-    def _calculate_asset_value_dummy(self, data: Dict[str, Any]) -> int:
-        """資産価値スコア（Phase 1はダミー）"""
-        # Phase 2で不動産価格データから計算
-        return 75
+    def _calculate_asset_value(self, data: Dict[str, Any]) -> int:
+        """資産価値スコア（地価データベース版）"""
+        # asset_value_scorerを使用
+        if hasattr(self, 'asset_value_scorer'):
+            return self.asset_value_scorer.calculate(data)
+        else:
+            # フォールバック
+            return 75
 
     def _calculate_living_dummy(self, data: Dict[str, Any]) -> int:
         """住環境スコア（Phase 1はダミー）"""
