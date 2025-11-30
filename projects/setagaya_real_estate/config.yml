@@ -1,0 +1,25 @@
+project:
+  name: "setagaya_real_estate"
+  version: "2.0"
+  description: "世田谷区の町丁目レベル資産価値記事生成プロジェクト（Phase 1.5完成版）"
+  target_ward: "世田谷区"
+
+data:
+  storage_type: "csv"
+  csv_dir: "projects/setagaya_real_estate/data"
+
+llm:
+  provider: "anthropic"
+  model: "claude-sonnet-4-5-20250929"
+  temperature: 0.7
+  max_tokens: 8000
+
+content:
+  prompts_dir: "projects/setagaya_real_estate/prompts"
+  output_dir: "projects/setagaya_real_estate/output"
+  charts_dir: "projects/setagaya_real_estate/charts"
+  html_dir: "projects/setagaya_real_estate/html"
+
+html:
+  template_file: "projects/setagaya_real_estate/templates/article_template.html"
+  affiliate_config: "projects/setagaya_real_estate/affiliate_config.yml"

@@ -1,0 +1,36 @@
+# Data Sources Configuration
+
+# 国土数値情報
+kokudo_suuchi:
+  name: "国土数値情報"
+  base_url: "https://nlftp.mlit.go.jp/ksj/gml/datalist"
+  enabled: true
+  datasets:
+    land_price:
+      code: "L01"
+      name: "地価公示"
+      format: "GML"
+      update_frequency: "年次"
+
+# 東京都オープンデータ
+tokyo_opendata:
+  name: "東京都オープンデータ"
+  base_url: "https://catalog.data.metro.tokyo.lg.jp"
+  enabled: true
+  datasets:
+    land_price:
+      name: "地価調査"
+      format: "CSV"
+      update_frequency: "年次"
+
+# e-Stat
+estat:
+  name: "e-Stat（政府統計ポータル）"
+  base_url: "https://api.e-stat.go.jp/rest/3.0/app/json"
+  api_key: ${ESTAT_API_KEY}
+  enabled: true
+  datasets:
+    population:
+      code: "0003448738"
+      name: "国勢調査"
+      update_frequency: "5年ごと"

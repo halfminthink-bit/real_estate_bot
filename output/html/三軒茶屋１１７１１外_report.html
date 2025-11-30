@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>三軒茶屋１１７１１外丁目 - 資産価値分析</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.8;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            border-left: 4px solid #4CAF50;
+            padding-left: 10px;
+        }
+        .chart-container {
+            position: relative;
+            height: 400px;
+            margin: 30px 0;
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        .score {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            font-size: 1.5em;
+            margin: 20px 0;
+        }
+        .metadata {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 30px;
+            font-size: 0.9em;
+            color: #666;
+        }
+        ul {
+            line-height: 2;
+        }
+        li {
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="content">
+        <h1>三軒茶屋１丁目の資産価値分析</h1>
+<h2>📊 総合スコア: 95点 / 100点</h2>
+<h2>地価推移（過去5年）</h2>
+<p>最新の地価公示データ（2025年）によると、<strong>三軒茶屋１丁目</strong>の公示地価は<strong>1,480,000円/㎡</strong>です。</p>
+<h3>5年間の変化</h3>
+<ul>
+<li>2021年: 1,220,000円/㎡</li>
+<li>2025年: 1,480,000円/㎡</li>
+<li><strong>5年間の変動率: +21.3%</strong></li>
+</ul>
+<h3>詳細な推移</h3>
+<ul>
+<li>2021年: 1,220,000円/㎡ (前年比: -2.4%)</li>
+<li>2022年: 1,230,000円/㎡ (前年比: +0.8%)</li>
+<li>2023年: 1,280,000円/㎡ (前年比: +4.1%)</li>
+<li>2024年: 1,360,000円/㎡ (前年比: +6.3%)</li>
+<li>2025年: 1,480,000円/㎡ (前年比: +8.8%)</li>
+</ul>
+<h3>最新の動向（2025年）</h3>
+<p>前年比で<strong>+8.8%</strong>の上昇となっています。</p>
+<h2>💡 資産価値の評価</h2>
+<p>この地域は<strong>大幅な上昇トレンド</strong>を示しており、資産価値が大きく向上している優良エリアと評価できます。</p>
+<h3>投資判断のポイント</h3>
+<ul>
+<li>✅ 過去5年間で安定した価格上昇</li>
+<li>✅ 資産価値の向上が期待できる</li>
+<li>✅ 売却時の価格維持・上昇の可能性が高い</li>
+</ul>
+<hr />
+<p><em>データ出典: 東京都オープンデータ（地価公示）</em>
+<em>分析日: 2025年11月30日</em></p>
+    </div>
+    
+    <div class="chart-container">
+        <canvas id="priceChart"></canvas>
+    </div>
+    
+    <script>
+        const ctx = document.getElementById('priceChart').getContext('2d');
+        const chartData = {"type": "line", "data": {"labels": ["2021", "2022", "2023", "2024", "2025"], "datasets": [{"label": "公示地価（円/㎡）", "data": [1220000, 1230000, 1280000, 1360000, 1480000], "borderColor": "#4CAF50", "backgroundColor": "rgba(76, 175, 80, 0.1)", "tension": 0.1, "fill": true}]}, "options": {"responsive": true, "plugins": {"title": {"display": true, "text": "地価推移（5年間）"}, "legend": {"display": true}}, "scales": {"y": {"beginAtZero": false, "ticks": {"callback": "function(value) { return value.toLocaleString() + \"円\"; }"}}}}};
+        
+        new Chart(ctx, {
+            type: chartData.type,
+            data: chartData.data,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: '地価推移（5年間）',
+                        font: {
+                            size: 18
+                        }
+                    },
+                    legend: {
+                        display: true
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: false,
+                        ticks: {
+                            callback: function(value) {
+                                return value.toLocaleString() + '円';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
