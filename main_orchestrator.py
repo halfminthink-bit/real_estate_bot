@@ -22,6 +22,7 @@ from modules.chart_generator.generator import ChartGenerator
 from modules.content_generator.generator import ContentGenerator
 from modules.content_generator.llm.anthropic_client import AnthropicClient
 from modules.html_builder.builder import HTMLBuilder
+from modules.article_manager import ArticleManager
 
 
 def setup_logging(log_level=logging.INFO):
@@ -139,6 +140,11 @@ def main():
         # HTML生成モジュール
         html_builder = HTMLBuilder(config)
 
+        # ArticleManager初期化
+        db_path = config.project_dir / 'articles.db'
+        article_manager = ArticleManager(db_path)
+        logger.info(f"ArticleManager initialized: {db_path}")
+
         # Orchestratorにモジュールを設定
         logger.info("Setting up orchestrator...")
         orchestrator = Orchestrator(config)
@@ -147,7 +153,8 @@ def main():
             score_calculator=score_calculator,
             chart_generator=chart_generator,
             content_generator=content_generator,
-            html_builder=html_builder
+            html_builder=html_builder,
+            article_manager=article_manager
         )
 
         # パイプライン実行
@@ -160,6 +167,17 @@ def main():
         logger.info(f"Output directory: {config.output_dir}")
         logger.info(f"Charts directory: {config.charts_dir}")
         logger.info(f"HTML directory: {config.html_dir}")
+        
+        # 統計表示
+        stats = article_manager.get_statistics()
+        logger.info("=" * 60)
+        logger.info("📊 Article Statistics")
+        logger.info("=" * 60)
+        logger.info(f"総記事数:         {stats['total']:>3}件")
+        logger.info(f"WordPress公開済み: {stats['published']:>3}件")
+        logger.info(f"WordPress下書き:   {stats['draft']:>3}件")
+        logger.info(f"未投稿:           {stats['unpublished']:>3}件")
+        logger.info("=" * 60)
 
     except FileNotFoundError as e:
         logger.error(f"File not found: {e}")

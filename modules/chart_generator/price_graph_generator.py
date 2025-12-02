@@ -6,7 +6,7 @@ matplotlib.use('Agg')  # GUIなし環境対応
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Optional
 import logging
 
 logger = logging.getLogger(__name__)
@@ -47,7 +47,7 @@ class PriceGraphGenerator:
         self, 
         price_history: List[Dict],
         area_name: str
-    ) -> str:
+    ) -> Optional[Path]:
         """
         地価推移グラフを生成（ハイブリッド表示：平均値 + 価格帯レンジ）
         
@@ -66,11 +66,11 @@ class PriceGraphGenerator:
             area_name: "三軒茶屋1丁目"
         
         Returns:
-            str: 画像ファイル名（相対パス）
+            Path: 画像ファイルのパス（存在しない場合はNone）
         """
         if not price_history:
             logger.warning(f"No price history data for {area_name}")
-            return ""
+            return None
         
         # データ抽出
         years = [item['year'] for item in price_history]
@@ -112,7 +112,7 @@ class PriceGraphGenerator:
                           linewidth=1.5, alpha=0.6, zorder=1)
                 ax.annotate('リーマンショック', 
                            xy=(2008, avg_prices[idx]), 
-                           xytext=(2008, avg_prices[idx] * 1.15),
+                           xytext=(2008, avg_prices[idx] * 0.85),  # 下に配置（コロナ禍と同じ）
                            ha='center', fontsize=10,
                            bbox=dict(boxstyle='round,pad=0.4', 
                                    facecolor='#FEE2E2', 
@@ -228,5 +228,5 @@ class PriceGraphGenerator:
         
         logger.info(f"Generated hybrid price graph ({num_years} years, {latest_points} points): {output_path}")
         
-        return filename
+        return output_path  # Pathオブジェクトを返す
 

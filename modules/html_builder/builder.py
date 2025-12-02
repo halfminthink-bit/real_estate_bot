@@ -2,10 +2,18 @@ import markdown
 import yaml
 from pathlib import Path
 from datetime import datetime
+from typing import Dict, Any, Optional
 import logging
 import re
 
 logger = logging.getLogger(__name__)
+
+try:
+    from bs4 import BeautifulSoup
+    HAS_BS4 = True
+except ImportError:
+    HAS_BS4 = False
+    logger.warning("BeautifulSoup4 not installed. Inline styles will use regex fallback.")
 
 class HTMLBuilder:
     """Markdown → HTML変換 + アフィリエイト挿入"""
@@ -25,14 +33,31 @@ class HTMLBuilder:
 
         logger.info(f"Initialized HTMLBuilder with template={self.template_path}")
 
-    def build(self, markdown_path: Path, chart_path: Path, output_path: Path):
+    def build(
+        self, 
+        markdown_path: Path, 
+        chart_path: Optional[Path], 
+        output_path: Path,
+        data: Optional[Dict[str, Any]] = None
+    ):
         """
         Markdown → HTML変換
-
+        
         Args:
             markdown_path: Markdownファイルパス
-            chart_path: レーダーチャート画像パス（None可、固定セクション方式では不要）
+            chart_path: グラフ画像パス（相対パス: ../charts/xxx.png）
             output_path: 出力HTMLパス
+            data: データ情報（テーブル生成用）
+                {
+                    'latest_price': int,        # 最新平均地価
+                    'latest_price_min': int,    # 最新最低地価
+                    'latest_price_max': int,    # 最新最高地価
+                    'latest_point_count': int,  # 調査地点数
+                    'price_change_26y': float,  # 26年変動率
+                    'price_change_5y': float,   # 5年変動率（オプション）
+                    'data_years': int,          # データ年数
+                    'asset_value_score': int    # 資産価値スコア
+                }
         """
         logger.info(f"Building HTML: {markdown_path} -> {output_path}")
 
@@ -40,53 +65,49 @@ class HTMLBuilder:
         with open(markdown_path, 'r', encoding='utf-8') as f:
             md_content = f.read()
 
-        # チャート画像挿入（旧方式の<CHART>タグ対応）
+        # 1. <CHART>置換（改善版）
         if '<CHART>' in md_content:
-            if chart_path:
-                chart_html = f'<div class="chart-container"><img src="{chart_path.name}" alt="レーダーチャート"></div>'
+            if chart_path and chart_path.exists():
+                chart_html = self._build_chart_html(chart_path)
                 md_content = md_content.replace('<CHART>', chart_html)
             else:
-                # chart_pathがNoneの場合は<CHART>タグを削除
+                # chart_pathがない場合は削除
                 md_content = md_content.replace('<CHART>', '')
+                logger.warning("Chart path not found, <CHART> marker removed")
         
-        # 固定セクション方式では、Markdown内に画像が直接埋め込まれているため
-        # 画像パスをHTMLから見た相対パスに調整
-        # 画像ファイルはchartsディレクトリに、HTMLはhtmlディレクトリに保存される
-        # 相対パス: html/ から charts/ へのパス
-        import re
-        # Markdownの画像記法 ![alt](filename) を検出してパスを調整
-        def adjust_image_path(match):
-            alt_text = match.group(1)
-            image_filename = match.group(2)
-            # HTMLから見た相対パス（html/ から charts/ へのパス）
-            relative_path = f"../charts/{image_filename}"
-            return f"![{alt_text}]({relative_path})"
+        # 2. <DATA_TABLE>置換（新規実装）
+        if '<DATA_TABLE>' in md_content:
+            if data:
+                table_html = self._build_data_table(data)
+                md_content = md_content.replace('<DATA_TABLE>', table_html)
+            else:
+                # dataがない場合は削除
+                md_content = md_content.replace('<DATA_TABLE>', '')
+                logger.warning("Data not provided, <DATA_TABLE> marker removed")
         
-        md_content = re.sub(r'!\[([^\]]*)\]\(([^)]+)\)', adjust_image_path, md_content)
+        # 3. 画像パス調整（既存のまま）
+        md_content = self._adjust_image_paths(md_content)
 
-        # アフィリエイトリンク挿入
+        # 4. <AFFILIATE>置換（既存のまま）
         affiliate_html = self._build_affiliate_section()
         md_content = md_content.replace('<AFFILIATE>', affiliate_html)
 
-        # Markdown → HTML
+        # 5. Markdown → HTML（既存のまま）
         html_content = markdown.markdown(md_content, extensions=['extra', 'nl2br'])
 
-        # テンプレートに埋め込み
+        # 5.5. インラインCSSを適用（WordPress対応）
+        html_content = self._apply_inline_styles(html_content)
+
+        # 6. テンプレート適用（既存のまま）
         if self.template_path.exists():
             with open(self.template_path, 'r', encoding='utf-8') as f:
                 template = f.read()
         else:
-            # テンプレートがない場合はシンプルなHTMLを生成
             template = self._get_default_template()
 
-        # タイトルを抽出（最初のH1タグから）
         title = self._extract_title(md_content)
-        h1_title = title  # H1タイトルも同じ
-        
-        # メタディスクリプションを生成（最初の150文字程度）
+        h1_title = title
         meta_description = self._extract_description(md_content)
-
-        # テンプレート変数を置換（二重波括弧に対応）
         update_date = datetime.now().strftime('%Y年%m月%d日')
         
         html = template.replace('{{ title }}', title)
@@ -95,28 +116,348 @@ class HTMLBuilder:
         html = html.replace('{{ content }}', html_content)
         html = html.replace('{{ update_date }}', update_date)
 
-        # 保存
+        # 7. 保存
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(html)
 
         logger.info(f"HTML saved to {output_path}")
 
+    def _adjust_image_paths(self, md_content: str) -> str:
+        """画像パスを相対パスに調整（既存メソッド、そのまま使用）"""
+        def adjust_image_path(match):
+            alt_text = match.group(1)
+            image_filename = match.group(2)
+            relative_path = f"../charts/{image_filename}"
+            return f"![{alt_text}]({relative_path})"
+        
+        return re.sub(r'!\[([^\]]*)\]\(([^)]+)\)', adjust_image_path, md_content)
+
+    def _build_chart_html(self, chart_path: Path) -> str:
+        """
+        グラフ画像のHTML生成
+        
+        Args:
+            chart_path: グラフ画像のパス
+        
+        Returns:
+            str: グラフのHTML
+        
+        Notes:
+            - 画像サイズ: 2084×1036px（アスペクト比 2:1）
+            - レスポンシブ対応: max-width 100%
+            - PC: 最大800px幅
+            - スマホ: 画面幅に合わせる
+        """
+        # chartsディレクトリからの相対パス
+        # html/ から charts/ への参照
+        relative_path = f"../charts/{chart_path.name}"
+        
+        return f'''<figure style="margin: 30px auto; text-align: center; max-width: 800px;">
+  <img src="{relative_path}" 
+       alt="地価推移グラフ" 
+       style="width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: block;">
+  <figcaption style="margin-top: 10px; font-size: 14px; color: #6b7280; text-align: center;">
+    26年間の地価推移（国土交通省データより）
+  </figcaption>
+</figure>'''
+
+    def _build_data_table(self, data: Dict[str, Any]) -> str:
+        """
+        データテーブルのHTML生成
+        
+        Args:
+            data: データ情報
+                {
+                    'latest_price': int,        # 平均地価
+                    'latest_price_min': int,    # 最低地価
+                    'latest_price_max': int,    # 最高地価
+                    'latest_point_count': int,  # 地点数
+                    'price_change_26y': float,  # 26年変動率（または5年変動率）
+                    'price_change_5y': float,    # 5年変動率（オプション）
+                    'data_years': int,          # データ年数
+                    'asset_value_score': int    # スコア
+                }
+        
+        Returns:
+            str: テーブルのHTML
+        
+        Notes:
+            - シンプルなストライプデザイン
+            - 変動率の色: プラス=緑、マイナス=赤
+            - レスポンシブ対応: overflow-x: auto
+        """
+        # データ取得（デフォルト値あり）
+        price_avg = data.get('latest_price', 0)
+        price_min = data.get('latest_price_min', price_avg)
+        price_max = data.get('latest_price_max', price_avg)
+        point_count = data.get('latest_point_count', 1)
+        
+        # 変動率（26年 > 5年の優先順位）
+        price_change = data.get('price_change_26y')
+        if price_change is None:
+            price_change = data.get('price_change_5y', 0)
+        
+        # データ年数
+        data_years = data.get('data_years', 26)
+        
+        # スコア
+        score = data.get('asset_value_score', 0)
+        
+        # 変動率の色とサイン
+        if price_change > 0:
+            change_color = '#16a34a'  # 緑
+            change_sign = '+'
+        elif price_change < 0:
+            change_color = '#dc2626'  # 赤
+            change_sign = ''
+        else:
+            change_color = '#6b7280'  # グレー
+            change_sign = ''
+        
+        return f'''<div style="overflow-x: auto; margin: 30px 0;">
+<table style="width: 100%; border-collapse: collapse; margin: 0 auto; max-width: 600px; font-size: 16px;">
+  <thead>
+    <tr style="background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);">
+      <th style="padding: 15px; text-align: left; color: white; font-weight: bold; border-bottom: 2px solid #1e40af;">項目</th>
+      <th style="padding: 15px; text-align: right; color: white; font-weight: bold; border-bottom: 2px solid #1e40af;">データ</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr style="background-color: #f8f9fa;">
+      <td style="padding: 12px 15px; border-bottom: 1px solid #e5e7eb;">平均地価</td>
+      <td style="padding: 12px 15px; text-align: right; border-bottom: 1px solid #e5e7eb; font-weight: bold; color: #1e3a8a;">{price_avg:,}円/㎡</td>
+    </tr>
+    <tr style="background-color: #ffffff;">
+      <td style="padding: 12px 15px; border-bottom: 1px solid #e5e7eb;">価格帯</td>
+      <td style="padding: 12px 15px; text-align: right; border-bottom: 1px solid #e5e7eb; font-weight: bold; color: #dc2626;">{price_min:,}〜{price_max:,}円/㎡</td>
+    </tr>
+    <tr style="background-color: #f8f9fa;">
+      <td style="padding: 12px 15px; border-bottom: 1px solid #e5e7eb;">調査地点数</td>
+      <td style="padding: 12px 15px; text-align: right; border-bottom: 1px solid #e5e7eb;">{point_count}地点</td>
+    </tr>
+    <tr style="background-color: #ffffff;">
+      <td style="padding: 12px 15px; border-bottom: 1px solid #e5e7eb;">{data_years}年間の変動</td>
+      <td style="padding: 12px 15px; text-align: right; border-bottom: 1px solid #e5e7eb; font-weight: bold; color: {change_color};">{change_sign}{price_change:.1f}%</td>
+    </tr>
+    <tr style="background-color: #f8f9fa;">
+      <td style="padding: 12px 15px;">資産価値スコア</td>
+      <td style="padding: 12px 15px; text-align: right; font-weight: bold; color: #1e3a8a;">{score}/100</td>
+    </tr>
+  </tbody>
+</table>
+</div>'''
+
     def _build_affiliate_section(self) -> str:
-        """アフィリエイトセクションHTML生成"""
+        """
+        アフィリエイトセクション生成（シンプル版）
+        
+        シンプルで読みやすいボタンデザイン
+        """
         if not self.affiliate_config:
             return ''
-
-        html = '<div class="affiliate-box">\n'
-        html += '<h3>💡 あなたの資産価値、無料で知れます</h3>\n'
-        html += '<p>このデータは参考値です。あなたの物件の正確な価値は、立地や状態によって大きく異なります。無料査定で「今の価値」を知っておきませんか？売る・売らないは後で決めればOK。まずは知ることから始めましょう。</p>\n'
-
+        
+        html = '<div style="background-color: #f8f9fa; padding: 30px; border-radius: 8px; margin: 40px 0; text-align: center;">\n'
+        html += '<h3 style="font-size: 20px; margin-bottom: 15px; color: #333;">💡 あなたの資産価値、無料で知れます</h3>\n'
+        html += '<p style="font-size: 15px; line-height: 1.8; color: #666; margin-bottom: 25px;">\n'
+        html += 'このデータは参考値です。あなたの物件の正確な価値は、複数の不動産会社に査定してもらうことで分かります。<br>\n'
+        html += '無料で査定できるので、今の資産価値を確認してみませんか？\n'
+        html += '</p>\n'
+        
+        # ボタンを生成（最初の2つまで）
+        buttons = []
         for key, config in self.affiliate_config.items():
-            button_color = config.get('button_color', '#FF6B35')
+            button_color = config.get('button_color', '#ff6b35')
             url = config.get('url', '#')
             text = config.get('text', '詳細を見る')
-            html += f'<a href="{url}" class="affiliate-button" style="background-color:{button_color}" target="_blank" rel="nofollow noopener">{text}</a>\n'
-
+            buttons.append((url, text, button_color))
+            if len(buttons) >= 2:
+                break
+        
+        # ボタンを表示
+        for i, (url, text, button_color) in enumerate(buttons):
+            margin_style = 'margin-bottom: 15px;' if i < len(buttons) - 1 else ''
+            html += f'<div style="{margin_style}">\n'
+            html += f'  <a href="{url}" style="display: inline-block; background-color: {button_color}; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 16px;" target="_blank" rel="nofollow noopener">{text}</a>\n'
+            html += '</div>\n'
+        
         html += '</div>\n'
+        return html
+
+    def _apply_inline_styles(self, html: str) -> str:
+        """
+        HTML要素にインラインCSSを適用
+        
+        WordPressでも正しく表示されるように、すべての要素にインラインCSSを追加
+        
+        Args:
+            html: 変換されたHTML
+        
+        Returns:
+            インラインCSS付きHTML
+        """
+        if HAS_BS4:
+            return self._apply_inline_styles_bs4(html)
+        else:
+            return self._apply_inline_styles_regex(html)
+    
+    def _apply_inline_styles_bs4(self, html: str) -> str:
+        """
+        BeautifulSoup4を使用してインラインCSSを適用
+        """
+        soup = BeautifulSoup(html, 'html.parser')
+        
+        # h2スタイル
+        for h2 in soup.find_all('h2'):
+            existing_style = h2.get('style', '')
+            h2['style'] = (
+                "color: #1E3A8A; "
+                "margin-top: 50px; "
+                "margin-bottom: 20px; "
+                "padding-left: 15px; "
+                "border-left: 5px solid #FF6B35; "
+                "font-size: 24px; "
+                "line-height: 1.4;"
+            ) + (f"; {existing_style}" if existing_style else "")
+        
+        # h3スタイル
+        for h3 in soup.find_all('h3'):
+            existing_style = h3.get('style', '')
+            h3['style'] = (
+                "color: #2563EB; "
+                "margin-top: 30px; "
+                "margin-bottom: 15px; "
+                "font-size: 20px; "
+                "line-height: 1.4;"
+            ) + (f"; {existing_style}" if existing_style else "")
+        
+        # pスタイル（既存のstyleがある場合は上書きしない）
+        for p in soup.find_all('p'):
+            if not p.get('style'):
+                p['style'] = (
+                    "margin-bottom: 20px; "
+                    "font-size: 16px; "
+                    "line-height: 1.8; "
+                    "color: #333;"
+                )
+        
+        # strongスタイル
+        for strong in soup.find_all('strong'):
+            existing_style = strong.get('style', '')
+            strong['style'] = (
+                "color: #1E3A8A; "
+                "font-weight: bold;"
+            ) + (f"; {existing_style}" if existing_style else "")
+        
+        # hrスタイル
+        for hr in soup.find_all('hr'):
+            hr['style'] = (
+                "border: none; "
+                "border-top: 2px solid #E5E7EB; "
+                "margin: 40px 0;"
+            )
+        
+        # ulスタイル
+        for ul in soup.find_all('ul'):
+            if not ul.get('style'):
+                ul['style'] = (
+                    "margin-left: 20px; "
+                    "margin-bottom: 20px; "
+                    "padding-left: 20px;"
+                )
+        
+        # olスタイル
+        for ol in soup.find_all('ol'):
+            if not ol.get('style'):
+                ol['style'] = (
+                    "margin-left: 20px; "
+                    "margin-bottom: 20px; "
+                    "padding-left: 20px;"
+                )
+        
+        # liスタイル
+        for li in soup.find_all('li'):
+            if not li.get('style'):
+                li['style'] = (
+                    "margin-bottom: 10px; "
+                    "line-height: 1.6;"
+                )
+        
+        return str(soup)
+    
+    def _apply_inline_styles_regex(self, html: str) -> str:
+        """
+        正規表現を使用してインラインCSSを適用（BeautifulSoup4がない場合のフォールバック）
+        """
+        # h2スタイル
+        def add_h2_style(match):
+            tag = match.group(0)
+            if 'style=' in tag:
+                # 既存のstyleがある場合は追加
+                return re.sub(r'style="([^"]*)"', r'style="\1; color: #1E3A8A; margin-top: 50px; margin-bottom: 20px; padding-left: 15px; border-left: 5px solid #FF6B35; font-size: 24px; line-height: 1.4;"', tag)
+            else:
+                return re.sub(r'(<h2[^>]*)>', r'\1 style="color: #1E3A8A; margin-top: 50px; margin-bottom: 20px; padding-left: 15px; border-left: 5px solid #FF6B35; font-size: 24px; line-height: 1.4;">', tag)
+        
+        html = re.sub(r'<h2[^>]*>', add_h2_style, html)
+        
+        # h3スタイル
+        def add_h3_style(match):
+            tag = match.group(0)
+            if 'style=' in tag:
+                return re.sub(r'style="([^"]*)"', r'style="\1; color: #2563EB; margin-top: 30px; margin-bottom: 15px; font-size: 20px; line-height: 1.4;"', tag)
+            else:
+                return re.sub(r'(<h3[^>]*)>', r'\1 style="color: #2563EB; margin-top: 30px; margin-bottom: 15px; font-size: 20px; line-height: 1.4;">', tag)
+        
+        html = re.sub(r'<h3[^>]*>', add_h3_style, html)
+        
+        # pスタイル（既存のstyleがない場合のみ）
+        def add_p_style(match):
+            tag = match.group(0)
+            if 'style=' not in tag:
+                return re.sub(r'(<p[^>]*)>', r'\1 style="margin-bottom: 20px; font-size: 16px; line-height: 1.8; color: #333;">', tag)
+            return tag
+        
+        html = re.sub(r'<p[^>]*>', add_p_style, html)
+        
+        # strongスタイル
+        def add_strong_style(match):
+            tag = match.group(0)
+            if 'style=' in tag:
+                return re.sub(r'style="([^"]*)"', r'style="\1; color: #1E3A8A; font-weight: bold;"', tag)
+            else:
+                return re.sub(r'(<strong[^>]*)>', r'\1 style="color: #1E3A8A; font-weight: bold;">', tag)
+        
+        html = re.sub(r'<strong[^>]*>', add_strong_style, html)
+        
+        # hrスタイル
+        html = re.sub(r'(<hr[^>]*)>', r'\1 style="border: none; border-top: 2px solid #E5E7EB; margin: 40px 0;">', html)
+        
+        # ulスタイル（既存のstyleがない場合のみ）
+        def add_ul_style(match):
+            tag = match.group(0)
+            if 'style=' not in tag:
+                return re.sub(r'(<ul[^>]*)>', r'\1 style="margin-left: 20px; margin-bottom: 20px; padding-left: 20px;">', tag)
+            return tag
+        
+        html = re.sub(r'<ul[^>]*>', add_ul_style, html)
+        
+        # olスタイル（既存のstyleがない場合のみ）
+        def add_ol_style(match):
+            tag = match.group(0)
+            if 'style=' not in tag:
+                return re.sub(r'(<ol[^>]*)>', r'\1 style="margin-left: 20px; margin-bottom: 20px; padding-left: 20px;">', tag)
+            return tag
+        
+        html = re.sub(r'<ol[^>]*>', add_ol_style, html)
+        
+        # liスタイル（既存のstyleがない場合のみ）
+        def add_li_style(match):
+            tag = match.group(0)
+            if 'style=' not in tag:
+                return re.sub(r'(<li[^>]*)>', r'\1 style="margin-bottom: 10px; line-height: 1.6;">', tag)
+            return tag
+        
+        html = re.sub(r'<li[^>]*>', add_li_style, html)
+        
         return html
 
     def _extract_title(self, markdown_content: str) -> str:

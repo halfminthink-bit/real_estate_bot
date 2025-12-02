@@ -4,9 +4,9 @@ area_id,ward,choume,priority,status
 3,世田谷区,三軒茶屋1丁目,1,completed
 4,世田谷区,三軒茶屋2丁目,1,completed
 5,世田谷区,上北沢3丁目,1,completed
-6,世田谷区,上北沢4丁目,1,pending
-7,世田谷区,上用賀1丁目,1,pending
-8,世田谷区,上用賀6丁目,1,pending
+6,世田谷区,上北沢4丁目,1,completed
+7,世田谷区,上用賀1丁目,1,completed
+8,世田谷区,上用賀6丁目,1,completed
 9,世田谷区,上祖師谷1丁目,1,pending
 10,世田谷区,上祖師谷2丁目,1,pending
 11,世田谷区,上祖師谷5丁目,1,pending

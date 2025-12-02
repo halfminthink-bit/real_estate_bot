@@ -25,6 +25,7 @@ plotly==5.18.0
 
 # Markdown Processing
 markdown>=3.5.0
+beautifulsoup4>=4.12.0
 
 # Logging
 loguru==0.7.2
@@ -35,3 +36,6 @@ pytest-cov==4.1.0
 
 # Address Normalization (future)
 # jageocoder==2.1.4
+
+# WordPress Integration
+pykakasi>=2.0.0

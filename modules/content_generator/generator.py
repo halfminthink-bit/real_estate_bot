@@ -2,7 +2,7 @@
 Content Generator - 固定セクション方式
 """
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional, Tuple
 from core.models import Area, ScoreResult
 from .llm.base_client import BaseLLMClient
 from modules.chart_generator.price_graph_generator import PriceGraphGenerator
@@ -31,7 +31,7 @@ class ContentGenerator:
         area: Area,
         score: ScoreResult,
         data: Dict[str, Any]
-    ) -> str:
+    ) -> Tuple[str, Optional[Path]]:
         """
         記事生成（Phase 2対応：プロンプトファイル使用）
         
@@ -41,21 +41,29 @@ class ContentGenerator:
             data: 収集データ
         
         Returns:
-            str: Markdown記事
+            Tuple[str, Optional[Path]]: (Markdown記事, グラフパス)
         """
         logger.info(f"Generating content for {area.ward}{area.choume}")
         
         # Step 1: グラフ生成
+        chart_path = None
         area_name = f"{area.ward.replace('区', '')}_{area.choume.replace('丁目', '')}"
-        price_graph_filename = ""
         if 'land_price_history' in data and data['land_price_history']:
-            price_graph_filename = self.graph_generator.generate_price_graph(
-                data['land_price_history'],
-                area_name
-            )
-            logger.info(f"Generated price graph: {price_graph_filename}")
+            try:
+                chart_path = self.graph_generator.generate_price_graph(
+                    data['land_price_history'],
+                    area_name
+                )
+                if chart_path:
+                    logger.info(f"Generated price graph: {chart_path}")
+                else:
+                    logger.warning("Price graph generation returned None")
+            except Exception as e:
+                logger.error(f"Error generating price graph: {e}", exc_info=True)
         
         # Step 2: データ変数を準備（Phase 2対応）
+        # プロンプトデータにはファイル名（文字列）を渡す
+        price_graph_filename = chart_path.name if chart_path else ""
         prompt_data = self._prepare_prompt_data(area, score, data, price_graph_filename)
         
         # Step 3: プロンプトファイルを読み込んで変数展開
@@ -66,7 +74,7 @@ class ContentGenerator:
         content = self._generate_content(prompt_data, outline)
         
         logger.info(f"Generated article: {len(content)} characters")
-        return content
+        return content, chart_path
     
     def _prepare_prompt_data(
         self,

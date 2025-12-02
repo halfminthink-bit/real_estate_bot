@@ -3,6 +3,7 @@ project:
   version: "2.0"
   description: "世田谷区の町丁目レベル資産価値記事生成プロジェクト（Phase 1.5完成版）"
   target_ward: "世田谷区"
+  survey_year: 2025  # PostgreSQLから取得する対象年度
 
 data:
   storage_type: "csv"
