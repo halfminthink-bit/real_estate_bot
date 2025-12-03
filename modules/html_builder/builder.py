@@ -174,8 +174,7 @@ class HTMLBuilder:
                     'latest_point_count': int,  # 地点数
                     'price_change_26y': float,  # 26年変動率（または5年変動率）
                     'price_change_5y': float,    # 5年変動率（オプション）
-                    'data_years': int,          # データ年数
-                    'asset_value_score': int    # スコア
+                    'data_years': int          # データ年数
                 }
         
         Returns:
@@ -200,9 +199,6 @@ class HTMLBuilder:
         # データ年数
         data_years = data.get('data_years', 26)
         
-        # スコア
-        score = data.get('asset_value_score', 0)
-        
         # 変動率の色とサイン
         if price_change > 0:
             change_color = '#16a34a'  # 緑
@@ -218,8 +214,8 @@ class HTMLBuilder:
 <table style="width: 100%; border-collapse: collapse; margin: 0 auto; max-width: 600px; font-size: 16px;">
   <thead>
     <tr style="background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);">
-      <th style="padding: 15px; text-align: left; color: white; font-weight: bold; border-bottom: 2px solid #1e40af;">項目</th>
-      <th style="padding: 15px; text-align: right; color: white; font-weight: bold; border-bottom: 2px solid #1e40af;">データ</th>
+      <th style="padding: 15px; text-align: left; color: black; font-weight: bold; border-bottom: 2px solid #1e40af;">項目</th>
+      <th style="padding: 15px; text-align: right; color: black; font-weight: bold; border-bottom: 2px solid #1e40af;">データ</th>
     </tr>
   </thead>
   <tbody>
@@ -236,12 +232,8 @@ class HTMLBuilder:
       <td style="padding: 12px 15px; text-align: right; border-bottom: 1px solid #e5e7eb;">{point_count}地点</td>
     </tr>
     <tr style="background-color: #ffffff;">
-      <td style="padding: 12px 15px; border-bottom: 1px solid #e5e7eb;">{data_years}年間の変動</td>
-      <td style="padding: 12px 15px; text-align: right; border-bottom: 1px solid #e5e7eb; font-weight: bold; color: {change_color};">{change_sign}{price_change:.1f}%</td>
-    </tr>
-    <tr style="background-color: #f8f9fa;">
-      <td style="padding: 12px 15px;">資産価値スコア</td>
-      <td style="padding: 12px 15px; text-align: right; font-weight: bold; color: #1e3a8a;">{score}/100</td>
+      <td style="padding: 12px 15px;">{data_years}年間の変動</td>
+      <td style="padding: 12px 15px; text-align: right; font-weight: bold; color: {change_color};">{change_sign}{price_change:.1f}%</td>
     </tr>
   </tbody>
 </table>
@@ -285,9 +277,17 @@ class HTMLBuilder:
 
     def _apply_inline_styles(self, html: str) -> str:
         """
-        HTML要素にインラインCSSを適用
+        最小限のインラインCSSを適用
         
-        WordPressでも正しく表示されるように、すべての要素にインラインCSSを追加
+        適用対象:
+        - 画像（figure, img, figcaption）
+        - 表（table, th, td）
+        - 強調（strong）
+        - CTAボックス
+        
+        適用しない:
+        - h1, h2, h3（WordPressが管理）
+        - p, hr（WordPressのデフォルトを使用）
         
         Args:
             html: 変換されたHTML
@@ -302,161 +302,142 @@ class HTMLBuilder:
     
     def _apply_inline_styles_bs4(self, html: str) -> str:
         """
-        BeautifulSoup4を使用してインラインCSSを適用
+        BeautifulSoup4を使用して最小限のインラインCSSを適用
+        
+        適用対象:
+        - 画像（figure, img, figcaption）
+        - 表（table, th, td）
+        - 強調（strong）- font-weightのみ
+        - CTAボックス（既に_build_affiliate_sectionで適用済み）
         """
         soup = BeautifulSoup(html, 'html.parser')
         
-        # h2スタイル
-        for h2 in soup.find_all('h2'):
-            existing_style = h2.get('style', '')
-            h2['style'] = (
-                "color: #1E3A8A; "
-                "margin-top: 50px; "
-                "margin-bottom: 20px; "
-                "padding-left: 15px; "
-                "border-left: 5px solid #FF6B35; "
-                "font-size: 24px; "
-                "line-height: 1.4;"
-            ) + (f"; {existing_style}" if existing_style else "")
+        # 画像のスタイル
+        for figure in soup.find_all('figure'):
+            figure['style'] = 'margin: 30px auto; text-align: center;'
         
-        # h3スタイル
-        for h3 in soup.find_all('h3'):
-            existing_style = h3.get('style', '')
-            h3['style'] = (
-                "color: #2563EB; "
-                "margin-top: 30px; "
-                "margin-bottom: 15px; "
-                "font-size: 20px; "
-                "line-height: 1.4;"
-            ) + (f"; {existing_style}" if existing_style else "")
+        for img in soup.find_all('img'):
+            img['style'] = 'width: 100%; max-width: 800px; height: auto; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);'
         
-        # pスタイル（既存のstyleがある場合は上書きしない）
-        for p in soup.find_all('p'):
-            if not p.get('style'):
-                p['style'] = (
-                    "margin-bottom: 20px; "
-                    "font-size: 16px; "
-                    "line-height: 1.8; "
-                    "color: #333;"
-                )
+        for figcaption in soup.find_all('figcaption'):
+            figcaption['style'] = 'margin-top: 10px; font-size: 14px; color: #6b7280;'
         
-        # strongスタイル
+        # 表のスタイル
+        for table in soup.find_all('table'):
+            # テーブルラッパー
+            if table.parent.name != 'div' or 'overflow-x' not in table.parent.get('style', ''):
+                wrapper = soup.new_tag('div', style='overflow-x: auto; margin: 30px 0;')
+                table.wrap(wrapper)
+            
+            table['style'] = 'width: 100%; border-collapse: collapse; max-width: 600px; margin: 0 auto;'
+        
+        for thead in soup.find_all('thead'):
+            for tr in thead.find_all('tr'):
+                tr['style'] = 'background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);'
+        
+        for th in soup.find_all('th'):
+            th['style'] = 'padding: 15px; color: black; font-weight: bold; border-bottom: 2px solid #1e40af;'
+            if th.get('align') == 'right' or 'text-align: right' in th.get('style', ''):
+                th['style'] += ' text-align: right;'
+        
+        for tr in soup.find_all('tr'):
+            if tr.parent.name == 'tbody':
+                # 偶数行・奇数行で背景色を変える
+                tbody_children = [child for child in tr.parent.children if child.name == 'tr']
+                row_index = tbody_children.index(tr) if tr in tbody_children else 0
+                if row_index % 2 == 0:
+                    tr['style'] = 'background-color: #f8f9fa;'
+                else:
+                    tr['style'] = 'background-color: #ffffff;'
+        
+        for td in soup.find_all('td'):
+            td['style'] = 'padding: 12px 15px; border-bottom: 1px solid #e5e7eb;'
+            if td.get('align') == 'right' or 'text-align: right' in td.get('style', ''):
+                td['style'] += ' text-align: right; font-weight: bold;'
+        
+        # 強調（色なし、font-weightのみ）
         for strong in soup.find_all('strong'):
-            existing_style = strong.get('style', '')
-            strong['style'] = (
-                "color: #1E3A8A; "
-                "font-weight: bold;"
-            ) + (f"; {existing_style}" if existing_style else "")
+            strong['style'] = 'font-weight: bold;'
         
-        # hrスタイル
-        for hr in soup.find_all('hr'):
-            hr['style'] = (
-                "border: none; "
-                "border-top: 2px solid #E5E7EB; "
-                "margin: 40px 0;"
-            )
-        
-        # ulスタイル
-        for ul in soup.find_all('ul'):
-            if not ul.get('style'):
-                ul['style'] = (
-                    "margin-left: 20px; "
-                    "margin-bottom: 20px; "
-                    "padding-left: 20px;"
-                )
-        
-        # olスタイル
-        for ol in soup.find_all('ol'):
-            if not ol.get('style'):
-                ol['style'] = (
-                    "margin-left: 20px; "
-                    "margin-bottom: 20px; "
-                    "padding-left: 20px;"
-                )
-        
-        # liスタイル
-        for li in soup.find_all('li'):
-            if not li.get('style'):
-                li['style'] = (
-                    "margin-bottom: 10px; "
-                    "line-height: 1.6;"
-                )
+        # CTAボックス（<AFFILIATE>マーカーが置き換えられた後のdiv）
+        # この部分は既にContentGeneratorで生成されているため、builder.pyでは特に処理不要
         
         return str(soup)
     
     def _apply_inline_styles_regex(self, html: str) -> str:
         """
-        正規表現を使用してインラインCSSを適用（BeautifulSoup4がない場合のフォールバック）
+        正規表現を使用して最小限のインラインCSSを適用（BeautifulSoup4がない場合のフォールバック）
+        
+        適用対象:
+        - 画像（figure, img, figcaption）
+        - 表（table, th, td）
+        - 強調（strong）- font-weightのみ
         """
-        # h2スタイル
-        def add_h2_style(match):
+        # 画像のスタイル
+        def add_figure_style(match):
             tag = match.group(0)
             if 'style=' in tag:
-                # 既存のstyleがある場合は追加
-                return re.sub(r'style="([^"]*)"', r'style="\1; color: #1E3A8A; margin-top: 50px; margin-bottom: 20px; padding-left: 15px; border-left: 5px solid #FF6B35; font-size: 24px; line-height: 1.4;"', tag)
+                return re.sub(r'style="([^"]*)"', r'style="\1; margin: 30px auto; text-align: center;"', tag)
             else:
-                return re.sub(r'(<h2[^>]*)>', r'\1 style="color: #1E3A8A; margin-top: 50px; margin-bottom: 20px; padding-left: 15px; border-left: 5px solid #FF6B35; font-size: 24px; line-height: 1.4;">', tag)
+                return re.sub(r'(<figure[^>]*)>', r'\1 style="margin: 30px auto; text-align: center;">', tag)
         
-        html = re.sub(r'<h2[^>]*>', add_h2_style, html)
+        html = re.sub(r'<figure[^>]*>', add_figure_style, html)
         
-        # h3スタイル
-        def add_h3_style(match):
+        def add_img_style(match):
             tag = match.group(0)
             if 'style=' in tag:
-                return re.sub(r'style="([^"]*)"', r'style="\1; color: #2563EB; margin-top: 30px; margin-bottom: 15px; font-size: 20px; line-height: 1.4;"', tag)
+                return re.sub(r'style="([^"]*)"', r'style="\1; width: 100%; max-width: 800px; height: auto; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);"', tag)
             else:
-                return re.sub(r'(<h3[^>]*)>', r'\1 style="color: #2563EB; margin-top: 30px; margin-bottom: 15px; font-size: 20px; line-height: 1.4;">', tag)
+                return re.sub(r'(<img[^>]*)>', r'\1 style="width: 100%; max-width: 800px; height: auto; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">', tag)
         
-        html = re.sub(r'<h3[^>]*>', add_h3_style, html)
+        html = re.sub(r'<img[^>]*>', add_img_style, html)
         
-        # pスタイル（既存のstyleがない場合のみ）
-        def add_p_style(match):
+        def add_figcaption_style(match):
             tag = match.group(0)
-            if 'style=' not in tag:
-                return re.sub(r'(<p[^>]*)>', r'\1 style="margin-bottom: 20px; font-size: 16px; line-height: 1.8; color: #333;">', tag)
-            return tag
+            if 'style=' in tag:
+                return re.sub(r'style="([^"]*)"', r'style="\1; margin-top: 10px; font-size: 14px; color: #6b7280;"', tag)
+            else:
+                return re.sub(r'(<figcaption[^>]*)>', r'\1 style="margin-top: 10px; font-size: 14px; color: #6b7280;">', tag)
         
-        html = re.sub(r'<p[^>]*>', add_p_style, html)
+        html = re.sub(r'<figcaption[^>]*>', add_figcaption_style, html)
         
-        # strongスタイル
+        # 表のスタイル（簡易版 - 複雑な処理はBeautifulSoup推奨）
+        def add_table_style(match):
+            tag = match.group(0)
+            if 'style=' in tag:
+                return re.sub(r'style="([^"]*)"', r'style="\1; width: 100%; border-collapse: collapse; max-width: 600px; margin: 0 auto;"', tag)
+            else:
+                return re.sub(r'(<table[^>]*)>', r'\1 style="width: 100%; border-collapse: collapse; max-width: 600px; margin: 0 auto;">', tag)
+        
+        html = re.sub(r'<table[^>]*>', add_table_style, html)
+        
+        def add_th_style(match):
+            tag = match.group(0)
+            if 'style=' in tag:
+                return re.sub(r'style="([^"]*)"', r'style="\1; padding: 15px; color: black; font-weight: bold; border-bottom: 2px solid #1e40af;"', tag)
+            else:
+                return re.sub(r'(<th[^>]*)>', r'\1 style="padding: 15px; color: black; font-weight: bold; border-bottom: 2px solid #1e40af;">', tag)
+        
+        html = re.sub(r'<th[^>]*>', add_th_style, html)
+        
+        def add_td_style(match):
+            tag = match.group(0)
+            if 'style=' in tag:
+                return re.sub(r'style="([^"]*)"', r'style="\1; padding: 12px 15px; border-bottom: 1px solid #e5e7eb;"', tag)
+            else:
+                return re.sub(r'(<td[^>]*)>', r'\1 style="padding: 12px 15px; border-bottom: 1px solid #e5e7eb;">', tag)
+        
+        html = re.sub(r'<td[^>]*>', add_td_style, html)
+        
+        # 強調（色なし、font-weightのみ）
         def add_strong_style(match):
             tag = match.group(0)
             if 'style=' in tag:
-                return re.sub(r'style="([^"]*)"', r'style="\1; color: #1E3A8A; font-weight: bold;"', tag)
+                return re.sub(r'style="([^"]*)"', r'style="\1; font-weight: bold;"', tag)
             else:
-                return re.sub(r'(<strong[^>]*)>', r'\1 style="color: #1E3A8A; font-weight: bold;">', tag)
+                return re.sub(r'(<strong[^>]*)>', r'\1 style="font-weight: bold;">', tag)
         
         html = re.sub(r'<strong[^>]*>', add_strong_style, html)
-        
-        # hrスタイル
-        html = re.sub(r'(<hr[^>]*)>', r'\1 style="border: none; border-top: 2px solid #E5E7EB; margin: 40px 0;">', html)
-        
-        # ulスタイル（既存のstyleがない場合のみ）
-        def add_ul_style(match):
-            tag = match.group(0)
-            if 'style=' not in tag:
-                return re.sub(r'(<ul[^>]*)>', r'\1 style="margin-left: 20px; margin-bottom: 20px; padding-left: 20px;">', tag)
-            return tag
-        
-        html = re.sub(r'<ul[^>]*>', add_ul_style, html)
-        
-        # olスタイル（既存のstyleがない場合のみ）
-        def add_ol_style(match):
-            tag = match.group(0)
-            if 'style=' not in tag:
-                return re.sub(r'(<ol[^>]*)>', r'\1 style="margin-left: 20px; margin-bottom: 20px; padding-left: 20px;">', tag)
-            return tag
-        
-        html = re.sub(r'<ol[^>]*>', add_ol_style, html)
-        
-        # liスタイル（既存のstyleがない場合のみ）
-        def add_li_style(match):
-            tag = match.group(0)
-            if 'style=' not in tag:
-                return re.sub(r'(<li[^>]*)>', r'\1 style="margin-bottom: 10px; line-height: 1.6;">', tag)
-            return tag
-        
-        html = re.sub(r'<li[^>]*>', add_li_style, html)
         
         return html
 

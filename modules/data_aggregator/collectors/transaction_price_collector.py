@@ -174,58 +174,104 @@ class TransactionPriceCollector:
         self,
         ward: str,
         choume: str,
-        year: int,
-        quarter: Optional[int] = None
+        years: int = 3
     ) -> Dict[str, Any]:
         """
-        特定の町丁目の取引データを取得（エリア全体）
+        特定の町丁目の取引データを取得（エリア全体、過去N年分）
         
         Args:
             ward: 区名（例: "世田谷区"）
             choume: 町丁目名（例: "上用賀6丁目"）
-            year: 取引年
-            quarter: 四半期
+            years: 取得する年数（デフォルト: 3）
+                  例: years=3 → 2022年〜2024年の全四半期を取得
         
         Returns:
             Dict: {
                 'area_name': str,           # 正規化後の地域名
                 'choume_full': str,         # 元の町丁目名
-                'data_count': int,          # 取引件数
-                'transactions': List[Dict], # 取引データ
-                'statistics': Dict          # 統計情報
+                'transaction_period': str,  # 期間文字列（例: '2022年〜2024年'）
+                'transaction_years': int,   # 取得年数
+                'transaction_count': int,    # 取引件数
+                'transaction_avg': int,      # 平均取引価格
+                'transaction_min': int,      # 最小取引価格
+                'transaction_max': int,      # 最大取引価格
+                'has_transaction_data': bool, # データ有無
+                'transaction_samples': List[Dict]  # 代表例（最大10件）
             }
+        
+        Note:
+            - 現在は2025年12月なので、最新データは2024年第4四半期まで
+            - 過去N年分の全四半期（N × 4四半期）を取得
+            - 各四半期ごとにAPI呼び出しを行い、結果を統合
         """
+        import time
+        
         # 1. 町丁目を正規化（"上用賀6丁目" → "上用賀"）
         area_name = self._normalize_choume(choume)
         
-        # 2. 世田谷区全体のデータを取得
-        # 世田谷区のコードは13112
+        # 2. 世田谷区のコードを取得
         city_code = "13112" if ward == "世田谷区" else None
         
         if not city_code:
             logger.warning(f"⚠️  {ward}の市区町村コードが不明です")
-            return self._empty_result(area_name, choume)
+            return self._empty_result_with_period(area_name, choume, years)
         
-        all_data = self.get_transaction_data(
-            year=year,
-            quarter=quarter,
-            city=city_code
-        )
+        # 3. 現在の年と四半期を設定
+        # 注意: 2025年12月時点で、最新の取引データは2024年第4四半期まで
+        latest_year = 2024
+        latest_quarter = 4
         
-        # 3. 該当エリアでフィルタリング
-        # DistrictNameに area_name が含まれるデータを抽出
-        filtered_data = [
-            item for item in all_data
-            if area_name in item.get('DistrictName', '')
-        ]
+        # 4. 過去N年分の全四半期データを取得
+        all_transactions = []
         
-        # 4. データがない場合
-        if not filtered_data:
-            return self._empty_result(area_name, choume)
+        for year_offset in range(years):
+            target_year = latest_year - year_offset
+            
+            # 各年の全四半期を取得（1〜4）
+            for quarter in range(1, 5):
+                # 最新年度の場合、latest_quarterより先の四半期はスキップ
+                if target_year == latest_year and quarter > latest_quarter:
+                    continue
+                
+                try:
+                    # API呼び出し（各四半期ごと）
+                    quarter_data = self.get_transaction_data(
+                        year=target_year,
+                        quarter=quarter,
+                        city=city_code
+                    )
+                    
+                    if quarter_data:
+                        # 該当エリアでフィルタリング
+                        filtered_quarter_data = [
+                            item for item in quarter_data
+                            if area_name in item.get('DistrictName', '')
+                        ]
+                        
+                        # 各取引に年・四半期情報を追加
+                        for transaction in filtered_quarter_data:
+                            transaction['year'] = target_year
+                            transaction['quarter'] = quarter
+                        
+                        all_transactions.extend(filtered_quarter_data)
+                        
+                        logger.debug(f"Fetched {target_year}Q{quarter}: {len(filtered_quarter_data)} transactions for {area_name}")
+                        
+                        # レート制限対策: APIコールの間隔を空ける
+                        time.sleep(0.5)
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to fetch data for {target_year}Q{quarter}: {e}")
+                    continue
         
-        # 5. 統計情報を計算
+        # 5. データが取得できなかった場合
+        if not all_transactions:
+            logger.info(f"No transaction data for {area_name} (past {years} years)")
+            return self._empty_result_with_period(area_name, choume, years)
+        
+        # 6. 価格データを抽出して統計を計算
         prices = []
-        for item in filtered_data:
+        for item in all_transactions:
             price_str = item.get('TradePrice', '0')
             if price_str and price_str != 'N/A':
                 try:
@@ -240,22 +286,24 @@ class TransactionPriceCollector:
                     pass
         
         if not prices:
-            return self._empty_result(area_name, choume)
+            return self._empty_result_with_period(area_name, choume, years)
         
-        sorted_prices = sorted(prices)
-        statistics = {
-            'avg_price': sum(prices) // len(prices),
-            'min_price': min(prices),
-            'max_price': max(prices),
-            'median_price': sorted_prices[len(sorted_prices) // 2]
-        }
+        # 7. 期間の文字列を生成
+        start_year = latest_year - years + 1
+        period = f'{start_year}年〜{latest_year}年'
         
+        # 8. 返り値を構築
         return {
             'area_name': area_name,
             'choume_full': choume,
-            'data_count': len(filtered_data),
-            'transactions': filtered_data,
-            'statistics': statistics
+            'transaction_period': period,
+            'transaction_years': years,
+            'transaction_count': len(all_transactions),
+            'transaction_avg': int(sum(prices) / len(prices)),
+            'transaction_min': min(prices),
+            'transaction_max': max(prices),
+            'has_transaction_data': True,
+            'transaction_samples': all_transactions[:10]  # 代表例を10件まで
         }
     
     def _normalize_choume(self, choume: str) -> str:
@@ -275,7 +323,7 @@ class TransactionPriceCollector:
     
     def _empty_result(self, area_name: str, choume: str) -> Dict:
         """
-        空の結果を返す
+        空の結果を返す（旧形式、後方互換性のため残す）
         """
         return {
             'area_name': area_name,
@@ -288,6 +336,35 @@ class TransactionPriceCollector:
                 'max_price': 0,
                 'median_price': 0
             }
+        }
+    
+    def _empty_result_with_period(self, area_name: str, choume: str, years: int) -> Dict:
+        """
+        空の結果を返す（期間情報付き）
+        
+        Args:
+            area_name: 正規化後の地域名
+            choume: 町丁目名
+            years: 取得年数
+        
+        Returns:
+            Dict: 空の取引データ（期間情報付き）
+        """
+        latest_year = 2024
+        start_year = latest_year - years + 1
+        period = f'{start_year}年〜{latest_year}年'
+        
+        return {
+            'area_name': area_name,
+            'choume_full': choume,
+            'transaction_period': period,
+            'transaction_years': years,
+            'transaction_count': 0,
+            'transaction_avg': 0,
+            'transaction_min': 0,
+            'transaction_max': 0,
+            'has_transaction_data': False,
+            'transaction_samples': []
         }
     
     def _send_request(self, params: Dict) -> requests.Response:

@@ -99,13 +99,15 @@
 
 | 項目 | 状態 | 詳細 |
 |------|------|------|
-| PostgreSQLスキーマ | ✅ 完了 | land_prices_kokudo テーブル |
+| PostgreSQLスキーマ | ✅ 完了 | land_prices_kokudo, choume_master テーブル |
+| 町丁目マスタ | ✅ 完了 | **128町丁目（世田谷区）** |
 | 国土数値情報（地価公示） | ✅ 完了 | **3,907件（世田谷区2000-2025年）** |
 | 用途地域・建築制限 | ✅ 100% | 26年分すべて完備 |
 | データ取得率 | ✅ 100% | 全年度・全項目完備 |
 
 **データ完備状況**:
 ```
+【地価公示データ】
 2000-2004年: 845件（バブル崩壊後）
 2005-2008年: 672件（ミニバブル期）
 2009-2012年: 585件（リーマンショック後）
@@ -115,6 +117,12 @@
 合計: 3,907件（26年分完璧）
 世田谷区平均地価: 550,420円/㎡（2000年）→ 834,716円/㎡（2025年）
 26年間で +51.7%上昇
+
+【町丁目マスタ】
+世田谷区: 128町丁目（全町丁目を網羅）
+- 三宿、三軒茶屋、上北沢、上用賀、上祖師谷、上野毛など
+- active = TRUE で処理対象を管理
+- 将来的に渋谷区、目黒区など他の区にも展開可能
 ```
 
 ### ✅ Phase 1.5: AI記事生成パイプライン（完了）
@@ -129,11 +137,14 @@
 | ArticleManager | ✅ 完了 | 記事メタデータ・投稿履歴管理（SQLite） |
 
 **記事生成実績**:
-- ✅ 141件の記事生成可能（世田谷区全域）
+- ✅ 128町丁目対応（世田谷区全域）
+- ✅ 6件の記事生成済み（2025年12月2日時点）
 - ✅ 26年間の地価推移グラフ
 - ✅ リーマンショック・コロナ禍の注釈
 - ✅ 用途地域・建蔽率・容積率の表示
-- ✅ インラインCSS（WordPress対応）
+- ✅ 取引価格データ統合（不動産情報ライブラリAPI）
+- ✅ インラインCSS最小化（WordPress対応）
+- ✅ SEO最適化タイトル生成
 
 ### ✅ Phase 2: WordPress自動投稿（完了）
 
@@ -212,6 +223,16 @@ real_estate_bot/
 
 ## 📊 データベース設計
 
+### PostgreSQL: 全体構成
+
+```
+real_estate_dev データベース
+├── land_prices_kokudo    (地価公示データ: 3,907件)
+└── choume_master         (町丁目マスタ: 128件)
+```
+
+---
+
 ### PostgreSQL: land_prices_kokudo テーブル
 
 ```sql
@@ -268,6 +289,90 @@ WHERE original_address LIKE '%上用賀6丁目%'
 GROUP BY survey_year
 ORDER BY survey_year;
 ```
+
+---
+
+### PostgreSQL: choume_master テーブル（町丁目マスタ）
+
+```sql
+-- 町丁目マスタテーブル
+CREATE TABLE choume_master (
+    id SERIAL PRIMARY KEY,
+    
+    -- 基本情報
+    ward TEXT NOT NULL,                        -- 区名（例: 世田谷区、渋谷区）
+    choume TEXT NOT NULL,                      -- 町丁目（例: 上北沢4丁目）
+    
+    -- 管理情報
+    prefecture TEXT DEFAULT '東京都',          -- 都道府県
+    active BOOLEAN DEFAULT TRUE,               -- 処理対象フラグ
+    
+    -- メタデータ
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    -- ユニーク制約
+    UNIQUE(ward, choume)
+);
+
+-- インデックス
+CREATE INDEX idx_choume_master_ward ON choume_master(ward);
+CREATE INDEX idx_choume_master_active ON choume_master(active);
+```
+
+**用途**:
+- 処理対象の町丁目を一元管理
+- 区と町丁目の関係を明示的に定義
+- `active` フラグで処理対象を制御
+
+**データ投入**:
+```sql
+-- 世田谷区の全町丁目を投入
+INSERT INTO choume_master (ward, choume)
+SELECT DISTINCT 
+    '世田谷区' as ward,
+    SUBSTRING(original_address FROM '^([^0-9]+[0-9]+丁目)') as choume
+FROM land_prices_kokudo
+WHERE survey_year = 2025
+  AND POSITION('丁目' IN original_address) > 0
+ON CONFLICT (ward, choume) DO NOTHING;
+```
+
+**将来の拡張**:
+```sql
+-- 渋谷区を追加する場合
+INSERT INTO choume_master (ward, choume)
+SELECT DISTINCT 
+    '渋谷区' as ward,
+    SUBSTRING(original_address FROM '^([^0-9]+[0-9]+丁目)') as choume
+FROM land_prices_kokudo
+WHERE survey_year = 2025
+  AND POSITION('丁目' IN original_address) > 0
+  AND original_address LIKE '%渋谷%'
+ON CONFLICT (ward, choume) DO NOTHING;
+
+-- 特定の町丁目を処理対象から除外
+UPDATE choume_master SET active = FALSE WHERE choume = '○○丁目';
+
+-- 処理対象の町丁目を確認
+SELECT ward, COUNT(*) as count 
+FROM choume_master 
+WHERE active = TRUE 
+GROUP BY ward;
+```
+
+**設計のポイント**:
+1. **区と町丁目の明示的な関係**
+   - `land_prices_kokudo.original_address` には区名が含まれない
+   - `choume_master` で区と町丁目の関係を明確に定義
+   
+2. **処理対象の制御**
+   - `active` フラグで処理対象を柔軟に管理
+   - 特定の町丁目を一時的に除外可能
+   
+3. **将来の拡張性**
+   - 複数区に対応可能な設計
+   - 都道府県カラムで全国展開も視野
 
 ---
 
@@ -397,16 +502,17 @@ python main_orchestrator.py \
   --project projects/setagaya_real_estate/config.yml \
   --limit 1
 
-# 全件生成（PostgreSQLから取得した全町丁目）
+# 全件生成（世田谷区全128町丁目）
 python main_orchestrator.py \
   --project projects/setagaya_real_estate/config.yml \
-  --limit 141
+  --limit 128
 ```
 
 **町丁目リストの取得**:
-- `core/area_loader.py`がPostgreSQLから直接取得
-- `config.yml`の`target_ward`と`survey_year`で対象を指定
-- CSVファイルへの依存を排除し、常に最新データを使用
+- `core/area_loader.py`がPostgreSQLの`choume_master`テーブルから取得
+- 世田谷区: 128町丁目（全町丁目を網羅）
+- `config.yml`の`target_ward`で対象区を指定
+- 未処理の町丁目から順番に処理（処理済みは自動でスキップ）
 
 **生成されるファイル**:
 ```
@@ -439,6 +545,8 @@ python scripts/post_to_wordpress.py --limit 141
 
 ### データベース操作
 
+#### PostgreSQL基本操作
+
 ```bash
 # PostgreSQL接続
 docker exec -it real_estate_db psql -U postgres -d real_estate_dev
@@ -446,12 +554,54 @@ docker exec -it real_estate_db psql -U postgres -d real_estate_dev
 # データ確認
 SELECT COUNT(*) FROM land_prices_kokudo;
 
+# 町丁目マスタの確認
+SELECT ward, COUNT(*) as count 
+FROM choume_master 
+WHERE active = TRUE 
+GROUP BY ward;
+
 # 町丁目の地価確認
 SELECT survey_year, AVG(official_price)::INTEGER
 FROM land_prices_kokudo
 WHERE original_address LIKE '%上用賀6丁目%'
 GROUP BY survey_year
 ORDER BY survey_year DESC;
+
+# 終了
+\q
+```
+
+#### 町丁目マスタの管理
+
+```bash
+# PostgreSQL接続
+docker exec -it real_estate_db psql -U postgres -d real_estate_dev
+
+# 全町丁目一覧
+SELECT id, ward, choume, active FROM choume_master ORDER BY choume;
+
+# 世田谷区の町丁目数
+SELECT COUNT(*) FROM choume_master WHERE ward = '世田谷区';
+
+# 処理対象の町丁目のみ表示
+SELECT choume FROM choume_master WHERE ward = '世田谷区' AND active = TRUE ORDER BY choume;
+
+# 特定の町丁目を処理対象から除外
+UPDATE choume_master SET active = FALSE WHERE choume = '○○丁目';
+
+# 特定の町丁目を処理対象に追加
+UPDATE choume_master SET active = TRUE WHERE choume = '○○丁目';
+
+# 渋谷区の町丁目を追加（将来の拡張）
+INSERT INTO choume_master (ward, choume)
+SELECT DISTINCT 
+    '渋谷区' as ward,
+    SUBSTRING(original_address FROM '^([^0-9]+[0-9]+丁目)') as choume
+FROM land_prices_kokudo
+WHERE survey_year = 2025
+  AND POSITION('丁目' IN original_address) > 0
+  AND original_address LIKE '%渋谷%'
+ON CONFLICT (ward, choume) DO NOTHING;
 
 # 終了
 \q
@@ -498,6 +648,8 @@ cat output/test_api_results/setagaya_2024q3.json | head -50
 
 ### トラブルシューティング
 
+#### 基本的な問題
+
 ```bash
 # PostgreSQLログ確認
 docker logs real_estate_db
@@ -510,6 +662,37 @@ python main_orchestrator.py \
   --project projects/setagaya_real_estate/config.yml \
   --force \
   --limit 1
+```
+
+#### 町丁目が取得できない場合
+
+```bash
+# 町丁目マスタの確認
+docker exec -it real_estate_db psql -U postgres -d real_estate_dev
+SELECT COUNT(*) FROM choume_master WHERE ward = '世田谷区';
+# 期待される結果: 128
+
+# 町丁目マスタが空の場合は再投入
+INSERT INTO choume_master (ward, choume)
+SELECT DISTINCT 
+    '世田谷区' as ward,
+    SUBSTRING(original_address FROM '^([^0-9]+[0-9]+丁目)') as choume
+FROM land_prices_kokudo
+WHERE survey_year = 2025
+  AND POSITION('丁目' IN original_address) > 0
+ON CONFLICT (ward, choume) DO NOTHING;
+```
+
+#### 処理済みエリアが多すぎる場合
+
+```bash
+# ArticleManagerの確認
+sqlite3 projects/setagaya_real_estate/articles.db
+SELECT COUNT(*) FROM articles;
+
+# 特定の記事を削除（再生成したい場合）
+DELETE FROM articles WHERE choume = '○○丁目';
+.quit
 ```
 
 ---
@@ -616,14 +799,72 @@ python scripts/import_kokudo_all_years.py
 
 ## 📈 今後の展開
 
-### Phase 3: 機能拡張（計画中）
+### Phase 3: 世田谷区の記事完成（進行中）
 
-- [ ] 他の市区町村への展開（渋谷区、目黒区など）
-- [ ] 世田谷区内での相対評価（区内順位）
+- [ ] 世田谷区全128町丁目の記事生成
+  - 現在: 6件完了
+  - 残り: 122件
+  - 所要時間: 約102分（1件50秒 × 122件）
+
+```bash
+# 残り全件を生成
+python main_orchestrator.py \
+  --project projects/setagaya_real_estate/config.yml \
+  --limit 128
+```
+
+### Phase 4: WordPress投稿（準備完了）
+
+- [ ] 全128記事をWordPressに投稿
+  - 1日5件ずつ予約投稿
+  - 26日間で完了
+  - 毎日18:00に自動公開
+
+```bash
+# 全記事を予約投稿
+python scripts/post_to_wordpress.py --limit 128
+```
+
+### Phase 5: 他の区への展開（計画中）
+
+**対応可能な区**:
+- 渋谷区（地価公示データあり）
+- 目黒区（地価公示データあり）
+- 品川区（地価公示データあり）
+
+**展開手順**:
+```sql
+-- 1. 町丁目マスタに追加
+INSERT INTO choume_master (ward, choume)
+SELECT DISTINCT 
+    '渋谷区' as ward,
+    SUBSTRING(original_address FROM '^([^0-9]+[0-9]+丁目)') as choume
+FROM land_prices_kokudo
+WHERE survey_year = 2025
+  AND POSITION('丁目' IN original_address) > 0
+  AND original_address LIKE '%渋谷%'
+ON CONFLICT (ward, choume) DO NOTHING;
+```
+
+```bash
+# 2. プロジェクト設定を変更
+# projects/shibuya_real_estate/config.yml
+target_ward: 渋谷区
+
+# 3. 記事生成
+python main_orchestrator.py \
+  --project projects/shibuya_real_estate/config.yml \
+  --limit 100
+```
+
+### Phase 6: 機能拡張（計画中）
+
+- [ ] 区内での相対評価（区内順位）
 - [ ] e-Stat人口データ統合
 - [ ] 周辺相場との比較機能
+- [ ] 過去記事の自動更新（年次）
 
-### Phase 4: サイト改善（計画中）
+### Phase 7: サイト改善（計画中）
 
 - [ ] SEO最適化
 - [ ] 内部リンク自動生成

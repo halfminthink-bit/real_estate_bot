@@ -78,6 +78,17 @@ class Orchestrator:
         
         self.logger.info(f"Loaded {len(choume_list)} areas from PostgreSQL")
         
+        # 未処理のエリアのみをフィルタリング
+        if self.article_manager:
+            unprocessed = []
+            for ward, choume in choume_list:
+                # 既に記事が存在するかチェック
+                if not self.article_manager.exists(ward, choume):
+                    unprocessed.append((ward, choume))
+            
+            choume_list = unprocessed
+            self.logger.info(f"Filtered to {len(choume_list)} unprocessed areas")
+        
         # 制限を適用
         if limit:
             choume_list = choume_list[:limit]
@@ -142,6 +153,19 @@ class Orchestrator:
                 survey_year=survey_year
             )
             
+            self.logger.info(f"Loaded {len(choume_list)} areas from PostgreSQL")
+            
+            # 未処理のエリアのみをフィルタリング
+            if self.article_manager:
+                unprocessed = []
+                for ward, choume in choume_list:
+                    # 既に記事が存在するかチェック
+                    if not self.article_manager.exists(ward, choume):
+                        unprocessed.append((ward, choume))
+                
+                choume_list = unprocessed
+                self.logger.info(f"Filtered to {len(choume_list)} unprocessed areas")
+            
             # 制限を適用
             if limit:
                 choume_list = choume_list[:limit]
@@ -158,7 +182,7 @@ class Orchestrator:
                 )
                 areas.append(area)
             
-            self.logger.info(f"Loaded {len(areas)} areas from PostgreSQL")
+            self.logger.info(f"Found {len(areas)} areas to process")
         else:
             # 処理したarea_idからareaを取得（簡易実装：area_idからward/choumeを推測できないため、PostgreSQLから再取得）
             self.logger.info("Loading processed areas from PostgreSQL")
@@ -169,6 +193,19 @@ class Orchestrator:
                 city_name=city_name,
                 survey_year=survey_year
             )
+            
+            self.logger.info(f"Loaded {len(choume_list)} areas from PostgreSQL")
+            
+            # 未処理のエリアのみをフィルタリング
+            if self.article_manager:
+                unprocessed = []
+                for ward, choume in choume_list:
+                    # 既に記事が存在するかチェック
+                    if not self.article_manager.exists(ward, choume):
+                        unprocessed.append((ward, choume))
+                
+                choume_list = unprocessed
+                self.logger.info(f"Filtered to {len(choume_list)} unprocessed areas")
             
             # 処理したarea_idの範囲内のみ取得
             if self.processed_area_ids:
@@ -248,8 +285,7 @@ class Orchestrator:
                                 'latest_point_count': data.get('latest_point_count', 1),
                                 'price_change_26y': data.get('price_change_26y'),
                                 'price_change_5y': data.get('price_change_5y'),
-                                'data_years': data_years,
-                                'asset_value_score': score.asset_value_score if score else 0
+                                'data_years': data_years
                             }
                         
                         # chart_pathを渡す
@@ -280,12 +316,17 @@ class Orchestrator:
                         else:
                             chart_path_str = ''
                         
+                        # パスをPOSIX形式（/）に正規化（Windowsのバックスラッシュを統一）
+                        def normalize_path(path_str: str) -> str:
+                            """パス区切り文字を / に統一"""
+                            return path_str.replace('\\', '/')
+                        
                         article_data = {
                             'ward': area.ward,
                             'choume': area.choume,
-                            'markdown_path': str(markdown_rel),
-                            'html_path': str(html_rel),
-                            'chart_path': chart_path_str,
+                            'markdown_path': normalize_path(str(markdown_rel)),
+                            'html_path': normalize_path(str(html_rel)),
+                            'chart_path': normalize_path(chart_path_str) if chart_path_str else '',
                             'title': title,
                             'word_count': len(markdown_content),
                             'data_years': data_years,
@@ -293,7 +334,6 @@ class Orchestrator:
                             'price_min': data.get('latest_price_min', data.get('latest_price', 0)),
                             'price_max': data.get('latest_price_max', data.get('latest_price', 0)),
                             'price_change': data.get('price_change_26y', data.get('price_change_5y', 0)),
-                            'asset_value_score': score.asset_value_score if score else 0,
                             'prompt_version': 'v2'
                         }
                         

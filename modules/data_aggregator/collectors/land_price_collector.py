@@ -76,9 +76,16 @@ class LandPriceCollector(BaseCollector):
             conn = psycopg2.connect(**self.db_config)
             cursor = conn.cursor()
 
-            # 町丁目名から検索パターン作成（例: "三軒茶屋1丁目%"）
+            # 町丁目名から検索パターン作成
+            # 全角→半角変換
             choume_normalized = area.choume.translate(str.maketrans('０１２３４５６７８９', '0123456789'))
-            search_pattern = f"{choume_normalized}%"
+            
+            # 念のため末尾の数字を削除（例: "世田谷2丁目3" → "世田谷2丁目"）
+            import re
+            choume_base = re.sub(r'\d+$', '', choume_normalized)
+            
+            # 検索パターン（例: "世田谷2丁目%"）
+            search_pattern = f"{choume_base}%"
             
             # 年度別の平均・最小・最大・地点数を取得
             cursor.execute('''

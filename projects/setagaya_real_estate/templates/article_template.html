@@ -7,25 +7,14 @@
     <title>{{ title }}</title>
 </head>
 <body>
-    <!-- メインコンテナ: インラインスタイルでWordPress対応 -->
-    <div style="max-width:800px; margin:0 auto; padding:20px; background:#fff; box-shadow:0 0 10px rgba(0,0,0,0.1); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue','Hiragino Sans','Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif; line-height:1.8; color:#333;">
-        
-        <!-- H1タイトル -->
-        <h1 style="color:#1E3A8A; border-bottom:4px solid #FF6B35; padding-bottom:15px; margin-bottom:30px; font-size:28px; line-height:1.4;">
-            {{ h1_title }}
-        </h1>
-        
-        <!-- 本文コンテンツ -->
-        {{ content }}
-        
-        <!-- データ出典・免責事項 -->
-        <div style="margin-top:60px; padding-top:30px; border-top:2px solid #E5E7EB; font-size:14px; color:#6B7280; line-height:1.6;">
-            <p style="margin-bottom:10px;"><strong>データ更新日:</strong> {{ update_date }}</p>
-            <p style="margin-bottom:10px;"><strong>データ出典:</strong> 警視庁（犯罪統計）、e-Stat（人口統計）、国土交通省（不動産価格）</p>
-            <p style="margin-bottom:10px;"><strong>免責事項:</strong> 本サイトは情報提供のみを目的としており、不動産の査定・売買の仲介は行っておりません。掲載されている情報は参考値であり、実際の査定額や取引価格とは異なる場合があります。正確な査定をご希望の方は、不動産会社にご相談ください。</p>
-        </div>
-    </div>
+    <!-- 本文コンテンツ（WordPressテーマのスタイルを使用） -->
+    {{ content }}
     
-    <!-- styleタグは削除（すべてインラインCSSに変更） -->
+    <!-- データ出典・免責事項 -->
+    <div style="margin-top: 60px; padding-top: 30px; border-top: 2px solid #E5E7EB; font-size: 14px; color: #6B7280;">
+        <p><strong>データ更新日:</strong> {{ update_date }}</p>
+        <p><strong>データ出典:</strong> 警視庁（犯罪統計）、e-Stat（人口統計）、国土交通省（不動産価格）</p>
+        <p><strong>免責事項:</strong> 本サイトは情報提供のみを目的としており、不動産の査定・売買の仲介は行っておりません。掲載されている情報は参考値であり、実際の査定額や取引価格とは異なる場合があります。正確な査定をご希望の方は、不動産会社にご相談ください。</p>
+    </div>
 </body>
 </html>

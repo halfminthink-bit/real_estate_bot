@@ -93,7 +93,7 @@ class ArticleManager:
                     'price_min': int,         # 最低地価
                     'price_max': int,         # 最高地価
                     'price_change': float,    # 変動率
-                    'asset_value_score': int, # スコア
+                    'asset_value_score': int, # スコア（オプショナル、デフォルト: 0）
                     'prompt_version': str     # プロンプトバージョン
                 }
         
@@ -138,7 +138,7 @@ class ArticleManager:
                     article_data['price_min'],
                     article_data['price_max'],
                     article_data['price_change'],
-                    article_data['asset_value_score'],
+                    article_data.get('asset_value_score', 0),  # オプショナル（デフォルト: 0）
                     datetime.now(),
                     article_data.get('prompt_version', 'v2'),
                     article_id
@@ -165,7 +165,7 @@ class ArticleManager:
                     article_data['price_min'],
                     article_data['price_max'],
                     article_data['price_change'],
-                    article_data['asset_value_score'],
+                    article_data.get('asset_value_score', 0),  # オプショナル（デフォルト: 0）
                     datetime.now(),
                     article_data.get('prompt_version', 'v2')
                 ))
@@ -275,6 +275,20 @@ class ArticleManager:
             )
             row = cursor.fetchone()
             return dict(row) if row else None
+    
+    def exists(self, ward: str, choume: str) -> bool:
+        """
+        記事が存在するかチェック
+        
+        Args:
+            ward: 区
+            choume: 町丁目
+        
+        Returns:
+            bool: 記事が存在する場合True
+        """
+        article = self.get_article(ward, choume)
+        return article is not None
     
     def get_all_articles(self) -> List[Dict]:
         """

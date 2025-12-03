@@ -52,42 +52,36 @@ class AreaLoader:
         survey_year: int = 2025
     ) -> List[Tuple[str, str]]:
         """
-        PostgreSQLから町丁目リストを取得
+        町丁目マスタから町丁目リストを取得
         
         Args:
-            city_name: 市区町村名（例: 世田谷区）
-            survey_year: 対象年度（デフォルト: 2025）
+            city_name: 区名（例: 世田谷区）
+            survey_year: 対象年度（現在は使用しないが、将来の拡張用に保持）
         
         Returns:
             List[Tuple[str, str]]: [(ward, choume), ...]
             例: [('世田谷区', '上用賀1丁目'), ('世田谷区', '上用賀6丁目'), ...]
+        
+        Note:
+            - 町丁目マスタテーブル（choume_master）から取得
+            - active = TRUE の町丁目のみ取得
+            - 将来的に複数区に対応可能
         """
         try:
             conn = psycopg2.connect(**self.db_config)
             cursor = conn.cursor()
             
-            # 市区町村名から検索パターン作成
-            # 「世田谷区」→「世田谷」で検索
-            search_pattern = city_name.replace('区', '').replace('市', '')
+            logger.info(f"Fetching choume list for {city_name}")
             
-            logger.info(f"Fetching choume list for {city_name} (year={survey_year})")
-            
-            # 最新年度から町丁目一覧を取得
-            # original_addressから「XX丁目」までを抽出
+            # 町丁目マスタから取得
+            # active = TRUE の町丁目のみ取得
             cursor.execute('''
-                SELECT DISTINCT 
-                    %s as ward,
-                    SUBSTRING(
-                        original_address 
-                        FROM 1 
-                        FOR POSITION('丁目' IN original_address) + 2
-                    ) as choume
-                FROM land_prices_kokudo
-                WHERE original_address LIKE %s
-                  AND survey_year = %s
-                  AND POSITION('丁目' IN original_address) > 0
+                SELECT ward, choume
+                FROM choume_master
+                WHERE ward = %s
+                  AND active = TRUE
                 ORDER BY choume
-            ''', (city_name, f'%{search_pattern}%', survey_year))
+            ''', (city_name,))
             
             areas = cursor.fetchall()
             

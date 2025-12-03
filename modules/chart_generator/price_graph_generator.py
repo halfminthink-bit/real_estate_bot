@@ -43,6 +43,42 @@ class PriceGraphGenerator:
         
         plt.rcParams['axes.unicode_minus'] = False
     
+    def _format_price(self, price: float) -> str:
+        """
+        金額を読みやすい形式に変換（グラフ用）
+        
+        Args:
+            price: 価格（円/㎡）
+        
+        Returns:
+            str: フォーマット済み文字列（例: "65万円/㎡", "1.2億円/㎡"）
+        """
+        if price >= 100000000:  # 1億円以上
+            return f'{price / 100000000:.1f}億円/㎡'
+        elif price >= 10000000:  # 1000万円以上
+            return f'{price / 10000000:.0f}万円/㎡'
+        elif price >= 10000:  # 1万円以上
+            return f'{price / 10000:.0f}万円/㎡'
+        else:
+            return f'{price:,.0f}円/㎡'
+    
+    def _format_price_for_axis(self, price: float) -> str:
+        """
+        Y軸用の金額フォーマット（単位のみ、数値はmatplotlibが自動設定）
+        
+        Args:
+            price: 価格（円/㎡）
+        
+        Returns:
+            str: 単位のみ（例: "万円/㎡", "億円/㎡"）
+        """
+        if price >= 100000000:  # 1億円以上
+            return '億円/㎡'
+        elif price >= 10000:  # 1万円以上
+            return '万円/㎡'
+        else:
+            return '円/㎡'
+    
     def generate_price_graph(
         self, 
         price_history: List[Dict],
@@ -98,7 +134,11 @@ class PriceGraphGenerator:
         title = f'{area_name} 地価推移（{years[0]}-{years[-1]}年）'
         ax.set_title(title, fontsize=16, pad=20, fontweight='bold')
         ax.set_xlabel('年', fontsize=12)
-        ax.set_ylabel('地価（円/㎡）', fontsize=12)
+        
+        # Y軸の単位を決定（最大価格に基づく）
+        max_price = max(max_prices)
+        y_unit = self._format_price_for_axis(max_price)
+        ax.set_ylabel(f'地価（{y_unit}）', fontsize=12)
         
         # グリッド
         ax.grid(True, alpha=0.3, linestyle='--', linewidth=0.8)
@@ -150,8 +190,10 @@ class PriceGraphGenerator:
             display_indices = [0] + list(range(4, len(years)-1, 5)) + [len(years)-1]
         
         for i in display_indices:
+            # 価格を読みやすい形式に変換
+            price_text = self._format_price(avg_prices[i])
             ax.annotate(
-                f'{avg_prices[i]:,.0f}',
+                price_text,
                 (years[i], avg_prices[i]),
                 textcoords="offset points",
                 xytext=(0, 8),
@@ -192,15 +234,18 @@ class PriceGraphGenerator:
                              alpha=0.95),
                     zorder=10)
         
-        # 価格帯の情報（右上）
+        # 価格帯の情報（右下）
         latest_min = min_prices[-1]
         latest_max = max_prices[-1]
         latest_points = point_counts[-1]
-        info_text = f'価格帯: {latest_min:,.0f}〜{latest_max:,.0f}円/㎡\n地点数: {latest_points}地点'
-        ax.text(0.98, 0.97, info_text,
+        # 価格を読みやすい形式に変換
+        min_text = self._format_price(latest_min)
+        max_text = self._format_price(latest_max)
+        info_text = f'価格帯: {min_text}〜{max_text}\n地点数: {latest_points}地点'
+        ax.text(0.98, 0.03, info_text,
                 transform=ax.transAxes,
                 fontsize=10,
-                verticalalignment='top',
+                verticalalignment='bottom',
                 horizontalalignment='right',
                 bbox=dict(boxstyle='round,pad=0.5', 
                          facecolor='white', 
@@ -211,8 +256,18 @@ class PriceGraphGenerator:
         # 凡例
         ax.legend(loc='upper left', fontsize=10, framealpha=0.9)
         
-        # Y軸のフォーマット（カンマ区切り）
-        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{int(x):,}'))
+        # Y軸のフォーマット（万円/億円形式）
+        # 最大価格に基づいて単位を決定
+        max_price = max(max_prices)
+        if max_price >= 100000000:  # 1億円以上
+            # 億円単位
+            ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{x / 100000000:.1f}億'))
+        elif max_price >= 10000:  # 1万円以上
+            # 万円単位
+            ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{int(x / 10000)}万'))
+        else:
+            # 円単位（カンマ区切り）
+            ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{int(x):,}'))
         
         # レイアウト調整
         plt.tight_layout()

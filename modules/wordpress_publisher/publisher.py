@@ -124,7 +124,9 @@ class WordPressPublisher:
             
             try:
                 # HTMLファイルを読み込み（project_dirからの相対パス）
-                html_path = self.project_dir / article['html_path']
+                # パスを正規化（Windowsのバックスラッシュを / に統一）
+                html_path_str = article['html_path'].replace('\\', '/')
+                html_path = self.project_dir / html_path_str
                 html_path = html_path.resolve()  # 絶対パスに変換
                 
                 if not html_path.exists():
@@ -132,6 +134,7 @@ class WordPressPublisher:
                     print(f"     検索パス: {html_path}")
                     print(f"     プロジェクトディレクトリ: {self.project_dir.resolve()}")
                     print(f"     データベースのhtml_path: {article['html_path']}")
+                    print(f"     正規化後のパス: {html_path_str}")
                     failed_count += 1
                     continue
                 
@@ -143,7 +146,9 @@ class WordPressPublisher:
                 
                 # 画像をアップロード
                 if article.get('chart_path'):
-                    chart_path = self.project_dir / article['chart_path']
+                    # パスを正規化（Windowsのバックスラッシュを / に統一）
+                    chart_path_str = article['chart_path'].replace('\\', '/')
+                    chart_path = self.project_dir / chart_path_str
                     chart_path = chart_path.resolve()  # 絶対パスに変換
                     
                     if chart_path.exists():
@@ -152,20 +157,13 @@ class WordPressPublisher:
                         
                         if uploaded_url:
                             # HTML内の画像パスを置き換え
-                            # 元のパス例: ../charts/世田谷_上北沢4_price_graph.png
                             import re
                             
-                            # imgタグを探して置き換え
-                            def replace_img_src(match):
-                                # src属性のみを置き換え
-                                old_src = match.group(1)
-                                if 'charts/' in old_src or '../charts/' in old_src:
-                                    return f'<img src="{uploaded_url}"'
-                                return match.group(0)
-                            
+                            # imgタグのsrc属性を置き換え（他の属性は保持）
+                            # マッチ例: <img alt="..." src="../charts/xxx.png" style="..."/>
                             html_content = re.sub(
-                                r'<img\s+src="([^"]+)"',
-                                replace_img_src,
+                                r'(<img[^>]*?\s)src="([^"]+)"',
+                                lambda m: f'{m.group(1)}src="{uploaded_url}"' if 'charts/' in m.group(2) else m.group(0),
                                 html_content
                             )
                             
@@ -346,27 +344,23 @@ class WordPressPublisher:
         WordPress用に以下の処理を行う:
         - <body>タグ内のコンテンツを抽出
         - <h1>タグを削除（WordPressのタイトル欄と重複するため）
-        - 最初の<div>コンテナを除去
         
         Args:
             html: 完全なHTMLファイルの内容
         
         Returns:
             str: <body>内のコンテンツ（<h1>タグ削除済み）
+        
+        Note:
+            - テンプレート修正により、メインコンテナの<div>は削除済み
+            - <body>内のコンテンツをそのまま使用
         """
         import re
         
         # <body>タグを探す
         match = re.search(r'<body[^>]*>(.*?)</body>', html, re.DOTALL)
         if match:
-            body_content = match.group(1)
-            
-            # メインコンテナの中身だけを抽出
-            div_match = re.search(r'<div[^>]*>(.*)</div>\s*$', body_content, re.DOTALL)
-            if div_match:
-                content = div_match.group(1).strip()
-            else:
-                content = body_content.strip()
+            content = match.group(1).strip()
             
             # <h1>タグをすべて削除
             # パターン1: <h1>...</h1>
