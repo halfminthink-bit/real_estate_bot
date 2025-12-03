@@ -59,7 +59,7 @@ class TransactionPriceCollector:
         # パラメータで直接指定された場合は優先、なければ環境変数から取得
         self.api_key = api_key or os.getenv('REINFOLIB_API_KEY')
         self.endpoint = endpoint or os.getenv('REINFOLIB_API_ENDPOINT', 'https://www.reinfolib.mlit.go.jp/ex-api/external')
-        self.timeout = timeout or int(os.getenv('REINFOLIB_API_TIMEOUT', '30'))
+        self.timeout = timeout or int(os.getenv('REINFOLIB_API_TIMEOUT', '60'))  # デフォルト60秒に延長
         
         if not self.api_key:
             logger.warning("REINFOLIB_API_KEY が.envに設定されていません")
@@ -257,8 +257,8 @@ class TransactionPriceCollector:
                         
                         logger.debug(f"Fetched {target_year}Q{quarter}: {len(filtered_quarter_data)} transactions for {area_name}")
                         
-                        # レート制限対策: APIコールの間隔を空ける
-                        time.sleep(0.5)
+                        # レート制限対策: APIコールの間隔を空ける（5秒待機）
+                        time.sleep(5.0)
                     
                 except Exception as e:
                     logger.warning(f"Failed to fetch data for {target_year}Q{quarter}: {e}")
@@ -367,16 +367,23 @@ class TransactionPriceCollector:
             'transaction_samples': []
         }
     
-    def _send_request(self, params: Dict) -> requests.Response:
+    def _send_request(self, params: Dict, max_retries: int = 3) -> requests.Response:
         """
-        APIリクエストを送信
+        APIリクエストを送信（リトライ処理付き）
         
         Args:
             params: クエリパラメータ
+            max_retries: 最大リトライ回数（デフォルト: 3回）
         
         Returns:
             requests.Response: レスポンスオブジェクト
+        
+        Raises:
+            ValueError: APIキーが無効、パラメータが不正、またはAPIエラー
+            requests.exceptions.RequestException: 接続エラー（リトライ後も失敗）
         """
+        import time
+        
         # リクエストヘッダー設定
         headers = {
             'Ocp-Apim-Subscription-Key': self.api_key or ''
@@ -385,24 +392,52 @@ class TransactionPriceCollector:
         # HTTPリクエスト送信
         url = f"{self.endpoint}/XIT001"
         
-        logger.debug(f"APIリクエスト送信: {url}, params={params}")
+        last_exception = None
         
-        response = requests.get(
-            url,
-            headers=headers,
-            params=params,
-            timeout=self.timeout
-        )
+        # リトライ処理（指数バックオフ）
+        for attempt in range(max_retries):
+            try:
+                logger.debug(f"APIリクエスト送信 (試行 {attempt + 1}/{max_retries}): {url}, params={params}")
+                
+                response = requests.get(
+                    url,
+                    headers=headers,
+                    params=params,
+                    timeout=self.timeout
+                )
+                
+                # ステータスコード確認
+                if response.status_code == 401:
+                    raise ValueError("❌ APIキーが無効です。.envのREINFOLIB_API_KEYを確認してください")
+                elif response.status_code == 400:
+                    raise ValueError(f"❌ パラメータが不正です: {params}")
+                elif response.status_code != 200:
+                    raise ValueError(f"❌ APIエラー: ステータスコード {response.status_code}, レスポンス: {response.text[:200]}")
+                
+                # 成功した場合はレスポンスを返す
+                if attempt > 0:
+                    logger.info(f"✅ APIリクエスト成功 (試行 {attempt + 1}/{max_retries})")
+                return response
+                
+            except (requests.exceptions.ConnectionError, 
+                    requests.exceptions.Timeout,
+                    requests.exceptions.RequestException) as e:
+                last_exception = e
+                
+                # 最後の試行でない場合は待機してリトライ
+                if attempt < max_retries - 1:
+                    wait_time = (2 ** attempt)  # 指数バックオフ: 1秒, 2秒, 4秒...
+                    logger.warning(f"⚠️ API接続エラー (試行 {attempt + 1}/{max_retries}): {e}")
+                    logger.info(f"⏳ {wait_time}秒待機してリトライします...")
+                    time.sleep(wait_time)
+                else:
+                    logger.error(f"❌ APIリクエスト失敗 (全{max_retries}回試行): {e}")
+                    raise
         
-        # ステータスコード確認
-        if response.status_code == 401:
-            raise ValueError("❌ APIキーが無効です。.envのREINFOLIB_API_KEYを確認してください")
-        elif response.status_code == 400:
-            raise ValueError(f"❌ パラメータが不正です: {params}")
-        elif response.status_code != 200:
-            raise ValueError(f"❌ APIエラー: ステータスコード {response.status_code}, レスポンス: {response.text[:200]}")
-        
-        return response
+        # ここには到達しないはずだが、念のため
+        if last_exception:
+            raise last_exception
+        raise requests.exceptions.RequestException("APIリクエストが失敗しました")
     
     def _parse_response(self, response: requests.Response) -> List[Dict]:
         """

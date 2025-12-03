@@ -655,6 +655,83 @@ class WordPressPublisher:
             raise ValueError(f"Missing WordPress configuration: {', '.join(missing)}")
         
         return merged
+    
+    def update_post(self, post_id: int, title: str, content: str, status: str = 'publish') -> dict:
+        """
+        既存の投稿を更新
+        
+        Args:
+            post_id: 更新する投稿のID
+            title: タイトル
+            content: HTML本文
+            status: 投稿ステータス（publish, draft, futureなど）
+        
+        Returns:
+            dict: {'success': True/False, 'post_id': int, 'url': str, 'error': str}
+        """
+        # Application Passwordのスペース除去
+        app_password_clean = self.app_password.replace(' ', '')
+        
+        credentials = f"{self.username}:{app_password_clean}"
+        token = base64.b64encode(credentials.encode()).decode()
+        
+        headers = {
+            'Authorization': f'Basic {token}',
+            'Content-Type': 'application/json'
+        }
+        
+        url = f"{self.api_url}/posts/{post_id}"
+        
+        data = {
+            'title': title,
+            'content': content,
+            'status': status
+        }
+        
+        print(f"  → 投稿更新中... (ID: {post_id}, {len(content)} chars)")
+        
+        try:
+            response = requests.post(
+                url,
+                json=data,
+                headers=headers,
+                timeout=30
+            )
+            
+            print(f"  → Response: HTTP {response.status_code}")
+            
+            if response.status_code == 200:
+                result = response.json()
+                return {
+                    'success': True,
+                    'post_id': result['id'],
+                    'url': result['link']
+                }
+            else:
+                # エラーメッセージをデコード
+                try:
+                    error_data = response.json()
+                    error_message = error_data.get('message', response.text)
+                    error_code = error_data.get('code', 'unknown')
+                    error_msg = f"HTTP {response.status_code} ({error_code}): {error_message}"
+                except:
+                    error_msg = f"HTTP {response.status_code}: {response.text[:200]}"
+                
+                return {
+                    'success': False,
+                    'error': error_msg
+                }
+        
+        except requests.exceptions.RequestException as e:
+            return {
+                'success': False,
+                'error': f"Request error: {str(e)}"
+            }
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f"Unexpected error: {str(e)}"
+            }
 
 
 

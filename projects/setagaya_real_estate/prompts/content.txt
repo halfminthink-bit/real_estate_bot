@@ -11,7 +11,8 @@
 【取引価格データ】
 {transaction_data}
 
-※取引データが空の場合（has_transaction_dataがFalseの場合）は、地価公示データのみで記事を構成してください。
+※重要: has_transaction_dataがTrueの場合（取引データがある場合）は、必ず<DATA_TABLE>の後に<TRANSACTION_DATA>マーカーを1行だけ配置してください。
+※取引データが空の場合（has_transaction_dataがFalseの場合）は、地価公示データのみで記事を構成し、<TRANSACTION_DATA>マーカーは配置しないでください。
 
 【記事の目的】
 1. 公的データの信頼性を強調
@@ -47,9 +48,9 @@
 
 ---
 
-### 3. 特殊マーカーの配置（重要）
+### 3. 特殊マーカーの配置（重要・必須）
 
-以下の4つのマーカーを**正確な位置**に配置してください：
+以下の4つのマーカーを**正確な位置**に配置してください。特に<TRANSACTION_DATA>は、has_transaction_dataがTrueの場合は**必ず配置**してください：
 
 #### <CHART>
 - **位置**: セクション2（2番目の##）の見出し直後
@@ -85,6 +86,7 @@
 - **内容**: 取引価格の統計と代表的な取引事例（2-3件）
 - **前後**: 必ず空行
 - **条件**: has_transaction_dataがTrueの場合のみ配置
+- **重要**: has_transaction_dataがTrueの場合は、必ずこのマーカーを配置してください
 
 **例**:
 ```
@@ -100,6 +102,7 @@
 - 「{choume}を含む周辺エリアの参考値」として扱う
 - 取引期間: {transaction_period}（過去{transaction_years}年分）を明記
 - 取引件数: {transaction_count}件を強調
+- **has_transaction_dataがTrueの場合は、必ず<TRANSACTION_DATA>マーカーを1行だけ配置してください（マーカー自体は置き換えられるため、説明文は不要）**
 - has_transaction_dataがFalseの場合は、このマーカーを配置しない
 - マーカーの前後には必ず空行を入れる
 
