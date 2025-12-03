@@ -2,7 +2,7 @@
 Content Generator - 固定セクション方式
 """
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional, Tuple
 from core.models import Area, ScoreResult
 from .llm.base_client import BaseLLMClient
 from modules.chart_generator.price_graph_generator import PriceGraphGenerator
@@ -24,6 +24,10 @@ class ContentGenerator:
             output_dir=str(config.charts_dir)
         )
         
+        # 取引価格データCollector初期化
+        from modules.data_aggregator.collectors.transaction_price_collector import TransactionPriceCollector
+        self.transaction_collector = TransactionPriceCollector()
+        
         logger.info(f"Initialized ContentGenerator with prompts_dir={self.prompts_dir}")
     
     def generate(
@@ -31,7 +35,7 @@ class ContentGenerator:
         area: Area,
         score: ScoreResult,
         data: Dict[str, Any]
-    ) -> str:
+    ) -> Tuple[str, Optional[Path]]:
         """
         記事生成（Phase 2対応：プロンプトファイル使用）
         
@@ -41,21 +45,29 @@ class ContentGenerator:
             data: 収集データ
         
         Returns:
-            str: Markdown記事
+            Tuple[str, Optional[Path]]: (Markdown記事, グラフパス)
         """
         logger.info(f"Generating content for {area.ward}{area.choume}")
         
         # Step 1: グラフ生成
+        chart_path = None
         area_name = f"{area.ward.replace('区', '')}_{area.choume.replace('丁目', '')}"
-        price_graph_filename = ""
         if 'land_price_history' in data and data['land_price_history']:
-            price_graph_filename = self.graph_generator.generate_price_graph(
-                data['land_price_history'],
-                area_name
-            )
-            logger.info(f"Generated price graph: {price_graph_filename}")
+            try:
+                chart_path = self.graph_generator.generate_price_graph(
+                    data['land_price_history'],
+                    area_name
+                )
+                if chart_path:
+                    logger.info(f"Generated price graph: {chart_path}")
+                else:
+                    logger.warning("Price graph generation returned None")
+            except Exception as e:
+                logger.error(f"Error generating price graph: {e}", exc_info=True)
         
         # Step 2: データ変数を準備（Phase 2対応）
+        # プロンプトデータにはファイル名（文字列）を渡す
+        price_graph_filename = chart_path.name if chart_path else ""
         prompt_data = self._prepare_prompt_data(area, score, data, price_graph_filename)
         
         # Step 3: プロンプトファイルを読み込んで変数展開
@@ -65,8 +77,12 @@ class ContentGenerator:
         # 本文生成
         content = self._generate_content(prompt_data, outline)
         
+        # <TRANSACTION_DATA>マーカーをコードで整形したHTMLに置き換え
+        transaction_data = self._fetch_transaction_data(area)
+        content = self._replace_transaction_marker(content, transaction_data)
+        
         logger.info(f"Generated article: {len(content)} characters")
-        return content
+        return content, chart_path
     
     def _prepare_prompt_data(
         self,
@@ -87,6 +103,11 @@ class ContentGenerator:
         Returns:
             Dict: プロンプトデータ
         """
+        # ═══════════════════════════════════════
+        # 取引価格データ取得
+        # ═══════════════════════════════════════
+        transaction_data = self._fetch_transaction_data(area)
+        
         # 地価履歴データ
         price_history = data.get('land_price_history', [])
         
@@ -151,9 +172,106 @@ class ContentGenerator:
             
             # グラフパス
             'chart_path': chart_path,
+            
+            # 取引価格データ
+            'area_name': transaction_data['area_name'],
+            'transaction_period': transaction_data['transaction_period'],
+            'transaction_years': transaction_data['transaction_years'],
+            'transaction_count': transaction_data['transaction_count'],
+            'transaction_avg': transaction_data['transaction_avg'],
+            'transaction_min': transaction_data['transaction_min'],
+            'transaction_max': transaction_data['transaction_max'],
+            'has_transaction_data': transaction_data['has_transaction_data'],
+            'transaction_samples': transaction_data['transaction_samples'],
         }
         
         return prompt_data
+    
+    def _fetch_transaction_data(self, area: Area) -> Dict[str, Any]:
+        """
+        取引価格データを取得して整形（過去3年分）
+        
+        Args:
+            area: エリア情報
+        
+        Returns:
+            Dict: 取引価格データ（整形済み）
+        """
+        try:
+            # 町丁目を正規化（"上用賀6丁目" → "上用賀"）
+            import re
+            match = re.search(r'^([^0-9]+)', area.choume)
+            area_name = match.group(1) if match else area.choume
+            
+            # APIから取引データ取得（過去3年分）
+            raw_data = self.transaction_collector.get_area_transactions(
+                ward=area.ward,
+                choume=area.choume,
+                years=3  # 過去3年分（2022-2024年）
+            )
+            
+            # データがない場合
+            if not raw_data.get('has_transaction_data', False):
+                logger.info(f"No transaction data for {area.choume} (past 3 years)")
+                return {
+                    'area_name': area_name,
+                    'transaction_period': raw_data.get('transaction_period', '2022年〜2024年'),
+                    'transaction_years': raw_data.get('transaction_years', 3),
+                    'transaction_count': 0,
+                    'transaction_avg': 0,
+                    'transaction_min': 0,
+                    'transaction_max': 0,
+                    'has_transaction_data': False,
+                    'transaction_samples': []
+                }
+            
+            # 取引事例を整形（上位10件から代表例を3件）
+            transaction_samples = []
+            for tx in raw_data.get('transaction_samples', [])[:3]:
+                transaction_samples.append({
+                    'type': tx.get('Type', ''),
+                    'price': tx.get('TradePrice', ''),
+                    'building_year': tx.get('BuildingYear', ''),
+                    'floor_plan': tx.get('FloorPlan', ''),
+                    'city_planning': tx.get('CityPlanning', ''),
+                    'coverage_ratio': tx.get('CoverageRatio', ''),
+                    'floor_area_ratio': tx.get('FloorAreaRatio', ''),
+                    'land_shape': tx.get('LandShape', ''),
+                    'frontage': tx.get('Frontage', ''),
+                    'year': tx.get('year', ''),
+                    'quarter': tx.get('quarter', '')
+                })
+            
+            logger.info(f"Fetched transaction data for {area.choume}: "
+                       f"{raw_data['transaction_count']} transactions (past {raw_data['transaction_years']} years), "
+                       f"avg={raw_data['transaction_avg']:,}円")
+            
+            return {
+                'area_name': area_name,
+                'transaction_period': raw_data.get('transaction_period', '2022年〜2024年'),
+                'transaction_years': raw_data.get('transaction_years', 3),
+                'transaction_count': raw_data['transaction_count'],
+                'transaction_avg': raw_data['transaction_avg'],
+                'transaction_min': raw_data['transaction_min'],
+                'transaction_max': raw_data['transaction_max'],
+                'has_transaction_data': True,
+                'transaction_samples': transaction_samples
+            }
+            
+        except Exception as e:
+            logger.error(f"Error fetching transaction data for {area.choume}: {e}", exc_info=True)
+            # エラー時は空データを返す
+            return {
+                'area_name': area.choume,
+                'transaction_period': '2022年〜2024年',
+                'transaction_years': 3,
+                'transaction_count': 0,
+                'transaction_avg': 0,
+                'transaction_min': 0,
+                'transaction_max': 0,
+                'has_transaction_data': False,
+                'transaction_samples': []
+            }
     
     def _load_prompt_file(self, filename: str) -> str:
         """
@@ -294,16 +412,27 @@ class ContentGenerator:
         data_text = f"""- 期間: {prompt_data['data_years']}年分（{prompt_data['oldest_year']}-{prompt_data['latest_year']}年）
 - 平均地価: {prompt_data['price_avg']:,}円/㎡
 - 価格帯: {prompt_data['price_min']:,}〜{prompt_data['price_max']:,}円/㎡（{prompt_data['point_count']}地点）
-- {prompt_data['data_years']}年変動: {prompt_data['price_change_long']:+.1f}%
-- 資産価値スコア: {prompt_data['asset_value_score']}/100"""
+- {prompt_data['data_years']}年変動: {prompt_data['price_change_long']:+.1f}%"""
+        
+        # 取引価格データを文字列化
+        transaction_text = ""
+        if prompt_data['has_transaction_data']:
+            transaction_text = f"""- 対象エリア: {prompt_data['area_name']}エリア全体
+- 取引期間: {prompt_data['transaction_period']}（過去{prompt_data['transaction_years']}年分）
+- 取引件数: {prompt_data['transaction_count']}件
+- 平均取引価格: {prompt_data['transaction_avg']:,}円
+- 価格帯: {prompt_data['transaction_min']:,}〜{prompt_data['transaction_max']:,}円"""
+        else:
+            transaction_text = "取引データなし（地価公示データのみで記事を構成してください）"
         
         # content_template用のデータを準備
         # 既存のprompt_dataに、persona, outline, dataを追加
         expanded_data = {
-            **prompt_data,      # 既存のデータ（ward, choume, 価格情報など）
-            'persona': persona, # ペルソナテキスト全体
-            'outline': outline, # 生成されたアウトライン全体
-            'data': data_text   # データ情報（整形済み文字列）
+            **prompt_data,              # 既存のデータ（ward, choume, 価格情報など）
+            'persona': persona,         # ペルソナテキスト全体
+            'outline': outline,         # 生成されたアウトライン全体
+            'data': data_text,          # 地価公示データ情報（整形済み文字列）
+            'transaction_data': transaction_text  # 取引価格データ情報（整形済み文字列）
         }
         
         # テンプレートを一括展開
@@ -317,6 +446,69 @@ class ContentGenerator:
         )
         
         return response.strip()
+    
+    def _replace_transaction_marker(self, content: str, transaction_data: Dict[str, Any]) -> str:
+        """
+        <TRANSACTION_DATA>マーカーを取引データで置き換え
+        
+        LLMに書かせるのではなく、コードで整形したHTMLを挿入する
+        
+        Args:
+            content: Markdown本文
+            transaction_data: 取引データ
+        
+        Returns:
+            マーカーを置き換えた本文
+        """
+        if not transaction_data.get('has_transaction_data'):
+            # データがない場合はマーカーを削除
+            return content.replace('<TRANSACTION_DATA>', '')
+        
+        # データを整形
+        period = transaction_data.get('transaction_period', '2022年〜2024年')
+        count = transaction_data.get('transaction_count', 0)
+        avg = transaction_data.get('transaction_avg', 0)
+        min_price = transaction_data.get('transaction_min', 0)
+        max_price = transaction_data.get('transaction_max', 0)
+        
+        # 金額を読みやすく変換
+        def format_price(price: int) -> str:
+            """金額を読みやすい形式に変換（億円・千万円・万円単位）"""
+            if price >= 100000000:  # 1億円以上
+                oku = price // 100000000  # 億円部分
+                senman = (price % 100000000) // 10000000  # 千万円部分
+                if senman > 0:
+                    return f'{oku}億{senman}千万円'
+                else:
+                    return f'{oku}億円'
+            elif price >= 10000000:  # 1000万円以上
+                # 千万円単位で表示（例: 6,572万円 → 6,572万円）
+                return f'{price / 10000:.0f}万円'
+            elif price >= 10000:  # 1万円以上
+                return f'{price / 10000:.0f}万円'
+            else:
+                return f'{price:,}円'
+        
+        avg_str = format_price(avg)
+        min_str = format_price(min_price)
+        max_str = format_price(max_price)
+        
+        # HTMLを生成
+        transaction_html = f'''
+<div style="background-color: #f0f9ff; padding: 20px; border-left: 4px solid #3b82f6; margin: 30px 0;">
+  <h3 style="margin-top: 0; color: #1e40af;">実際の取引価格データ（{period}）</h3>
+  <ul style="list-style: none; padding-left: 0;">
+    <li style="margin-bottom: 8px;"><strong style="font-weight: bold;">取引件数:</strong> {count:,}件</li>
+    <li style="margin-bottom: 8px;"><strong style="font-weight: bold;">平均取引価格:</strong> 約{avg_str}</li>
+    <li style="margin-bottom: 8px;"><strong style="font-weight: bold;">価格帯:</strong> {min_str}〜{max_str}</li>
+  </ul>
+  <p style="font-size: 14px; color: #6b7280; margin-bottom: 0;">
+    （出典：国土交通省 不動産取引価格情報）
+  </p>
+</div>
+'''
+        
+        return content.replace('<TRANSACTION_DATA>', transaction_html)
     
     def _generate_intro(self, area: Area, score: ScoreResult, data: Dict) -> str:
         """イントロ生成（LLM 500文字）"""

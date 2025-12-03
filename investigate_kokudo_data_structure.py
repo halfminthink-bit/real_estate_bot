@@ -206,3 +206,8 @@ if __name__ == '__main__':
         print(f"  カラム数:      {result['column_count']}個")
         print(f"  世田谷区:      {result['setagaya_count']}件")
 
+
+
+
+
+
