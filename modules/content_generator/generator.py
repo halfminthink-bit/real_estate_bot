@@ -125,12 +125,47 @@ class ContentGenerator:
         price_max = data.get('latest_price_max', data.get('latest_price', 0))
         price_avg = data.get('latest_price', 0)
         
-        # 価格帯の幅（倍率）
-        price_ratio = price_max / price_min if price_min > 0 else 1.0
+        # 価格帯の幅（倍率）- land_price_collectorで計算済みの値を使用
+        price_ratio = data.get('price_ratio', price_max / price_min if price_min > 0 else 1.0)
+        has_wide_range = data.get('has_wide_range', False)
         
         # 長期変動率（26年 or 5年）
         price_change_long = data.get('price_change_26y', 
                                      data.get('price_change_5y', 0))
+        
+        # 【追加】タイトル候補生成
+        title_candidates = self._generate_title_candidates(
+            ward=area.ward,
+            choume=area.choume,
+            price_ratio=price_ratio,
+            price_avg=price_avg,
+            point_count=point_count,
+            price_change_long=price_change_long,
+            data_years=data_years,
+            has_wide_range=has_wide_range
+        )
+        
+        # 【追加】年次詳細データの整形
+        # リーマンショック期の変動率（2008-2009年）
+        lehman_change = None
+        for i, history_data in enumerate(price_history):
+            if history_data['year'] == 2009 and i > 0:
+                lehman_change = history_data['change']
+                break
+        
+        # コロナ禍期の変動率（2020-2021年）
+        covid_change = None
+        for i, history_data in enumerate(price_history):
+            if history_data['year'] == 2021 and i > 0:
+                covid_change = history_data['change']
+                break
+        
+        # 年次データのサマリー（LLMが読みやすい形式）
+        history_summary = []
+        for history_data in price_history:
+            history_summary.append(
+                f"{history_data['year']}年: {history_data['price']:,}円/㎡ (前年比{history_data['change']:+.1f}%)"
+            )
         
         # プロンプトデータ
         prompt_data = {
@@ -150,15 +185,25 @@ class ContentGenerator:
             'price_min': price_min,
             'price_max': price_max,
             'price_ratio': price_ratio,
+            'price_ratio_str': f"{price_ratio:.1f}",  # 文字列フォーマット
+            'has_wide_range': has_wide_range,
             'point_count': point_count,
             
             # 変動率
             'price_change_long': price_change_long,
+            
+            # 【追加】タイトル候補
+            'title_candidates': title_candidates,
             'price_change_5y': data.get('price_change_5y', 0),
             'price_change_1y': data.get('price_change_1y', 0),
             
             # 地価履歴（グラフ用）
             'land_price_history': price_history,
+            
+            # 【追加】年次詳細データ
+            'land_price_history_detail': '\n'.join(history_summary),
+            'lehman_change': f"{lehman_change:+.1f}%" if lehman_change is not None else "データなし",
+            'covid_change': f"{covid_change:+.1f}%" if covid_change is not None else "データなし",
             
             # 国土数値情報
             'land_use': data.get('land_use', ''),
@@ -184,6 +229,14 @@ class ContentGenerator:
             'has_transaction_data': transaction_data['has_transaction_data'],
             'transaction_samples': transaction_data['transaction_samples'],
         }
+        
+        # 【デバッグ用ログ】
+        logger.info(f"Prompt data prepared for {area.choume}:")
+        logger.info(f"  lehman_change: {prompt_data.get('lehman_change')}")
+        logger.info(f"  covid_change: {prompt_data.get('covid_change')}")
+        logger.info(f"  land_price_history_detail (first 3 years):")
+        for line in history_summary[:3]:
+            logger.info(f"    {line}")
         
         return prompt_data
     
@@ -272,6 +325,60 @@ class ContentGenerator:
                 'has_transaction_data': False,
                 'transaction_samples': []
             }
+    
+    def _generate_title_candidates(
+        self,
+        ward: str,
+        choume: str,
+        price_ratio: float,
+        price_avg: int,
+        point_count: int,
+        price_change_long: float,
+        data_years: int,
+        has_wide_range: bool
+    ) -> str:
+        """
+        タイトル候補を生成（優先度順）
+        
+        【重要】キーワードは「土地売却相場」「土地価格」を使用
+        「地価」は研究的すぎるため使用禁止
+        
+        Returns:
+            str: フォーマット済みのタイトル候補文字列
+        """
+        candidates = []
+        
+        # 【優先度1】価格帯の幅 + 売却相場
+        if has_wide_range:
+            candidates.append(
+                f"【候補1】 {ward}{choume}の土地売却相場【{price_ratio:.1f}倍の価格差】\n"
+                f"理由: 同じエリアでも大きな価格差があることを強調し、査定の必要性を訴求します"
+            )
+        
+        # 【優先度2】具体的金額 + 売却相場
+        if price_avg > 1000000:
+            price_man = int(price_avg / 10000)
+            candidates.append(
+                f"【候補2】 {ward}{choume}の土地売却相場【2025年：{price_man}万円/㎡】\n"
+                f"理由: 最新の具体的な金額を提示し、売却を検討している人に刺さります"
+            )
+        
+        # 【優先度3】変動率 + 土地価格
+        if abs(price_change_long) > 5:
+            sign = '+' if price_change_long > 0 else ''
+            candidates.append(
+                f"【候補3】 {ward}{choume}の土地価格【{data_years}年で{sign}{price_change_long:.1f}%】\n"
+                f"理由: 長期的な価値の変動を示し、資産価値の変化を訴求します"
+            )
+        
+        # 【優先度4】デフォルト（売却相場）
+        if not candidates:
+            candidates.append(
+                f"【候補4】 {ward}{choume}の土地売却相場【{data_years}年分のデータで分析】\n"
+                f"理由: 公的データの信頼性を強調しつつ、売却を意識させます"
+            )
+        
+        return "\n\n".join(candidates)
     
     def _load_prompt_file(self, filename: str) -> str:
         """

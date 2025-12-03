@@ -171,6 +171,15 @@ class LandPriceCollector(BaseCollector):
                 'station_distance': latest[12]
             }
 
+            # 価格倍率関連の計算
+            price_min = latest[3] if latest[3] else 0
+            price_max = latest[4] if latest[4] else 0
+            point_count = latest[1] if latest[1] else 0
+            
+            price_ratio = price_max / price_min if price_min > 0 else 1.0
+            price_range_yen = price_max - price_min
+            has_wide_range = (price_ratio > 1.5 and point_count > 1) if price_min > 0 else False
+
             result = {
                 'land_price_history': history,
                 'latest_price': latest[2],            # 平均価格
@@ -182,6 +191,10 @@ class LandPriceCollector(BaseCollector):
                 'price_change_1y': price_change_1y,
                 'data_source': '地価公示',
                 'original_address': latest[13],
+                # 【追加】価格倍率関連
+                'price_ratio': price_ratio,
+                'price_range_yen': price_range_yen,
+                'has_wide_range': has_wide_range,
                 **kokudo_data
             }
 
