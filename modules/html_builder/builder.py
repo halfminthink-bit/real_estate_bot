@@ -88,8 +88,13 @@ class HTMLBuilder:
         # 3. 画像パス調整（既存のまま）
         md_content = self._adjust_image_paths(md_content)
 
-        # 4. <AFFILIATE>置換（既存のまま）
-        affiliate_html = self._build_affiliate_section()
+        # 4. <AFFILIATE>置換
+        # 注意: マーカーの前後のテキスト（安心要素、最後の一押し）はLLMが生成するため保持されます
+        # マーカー部分のみを設定ファイルから取得したURLを含むボタンに置き換えます
+        # タイトルから町丁目名を抽出
+        title = self._extract_title(md_content)
+        choume = self._extract_choume_from_title(title)
+        affiliate_html = self._build_affiliate_section(choume)
         md_content = md_content.replace('<AFFILIATE>', affiliate_html)
 
         # 5. Markdown → HTML（既存のまま）
@@ -239,41 +244,56 @@ class HTMLBuilder:
 </table>
 </div>'''
 
-    def _build_affiliate_section(self) -> str:
+    def _extract_choume_from_title(self, title: str) -> str:
         """
-        アフィリエイトセクション生成（シンプル版）
+        タイトルから町丁目名を抽出
         
-        シンプルで読みやすいボタンデザイン
+        Args:
+            title: タイトル（例: "世田谷区三軒茶屋2丁目の土地売却相場【27.0倍の価格差】"）
+        
+        Returns:
+            str: 町丁目名（例: "三軒茶屋2丁目"）
+        """
+        # 「区」の後から「丁目」までを抽出
+        match = re.search(r'区([^の]+丁目)', title)
+        if match:
+            return match.group(1)
+        return ""
+    
+    def _build_affiliate_section(self, choume: str = "") -> str:
+        """
+        アフィリエイトセクションのHTML生成
+        
+        Args:
+            choume: 町丁目名（例: "三軒茶屋2丁目"）
         """
         if not self.affiliate_config:
             return ''
         
-        html = '<div style="background-color: #f8f9fa; padding: 30px; border-radius: 8px; margin: 40px 0; text-align: center;">\n'
-        html += '<h3 style="font-size: 20px; margin-bottom: 15px; color: #333;">💡 あなたの資産価値、無料で知れます</h3>\n'
-        html += '<p style="font-size: 15px; line-height: 1.8; color: #666; margin-bottom: 25px;">\n'
-        html += 'このデータは参考値です。あなたの物件の正確な価値は、複数の不動産会社に査定してもらうことで分かります。<br>\n'
-        html += '無料で査定できるので、今の資産価値を確認してみませんか？\n'
-        html += '</p>\n'
+        # ボタンテキスト（町丁目名を含める）
+        button_text = f"【無料】60秒で{choume}の最高値を調べる" if choume else "【無料】60秒で最高値を調べる"
         
-        # ボタンを生成（最初の2つまで）
-        buttons = []
+        # アフィリエイト設定からURLを取得（最初の1つ）
+        url = '#'
         for key, config in self.affiliate_config.items():
-            button_color = config.get('button_color', '#ff6b35')
             url = config.get('url', '#')
-            text = config.get('text', '詳細を見る')
-            buttons.append((url, text, button_color))
-            if len(buttons) >= 2:
-                break
+            break
         
-        # ボタンを表示
-        for i, (url, text, button_color) in enumerate(buttons):
-            margin_style = 'margin-bottom: 15px;' if i < len(buttons) - 1 else ''
-            html += f'<div style="{margin_style}">\n'
-            html += f'  <a href="{url}" style="display: inline-block; background-color: {button_color}; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 16px;" target="_blank" rel="nofollow noopener">{text}</a>\n'
-            html += '</div>\n'
-        
-        html += '</div>\n'
-        return html
+        return f'''
+<div style="background-color: #f8f9fa; padding: 30px; border-radius: 8px; margin: 40px 0; text-align: center;">
+<h3 style="font-size: 20px; margin-bottom: 15px; color: #333;">💡 あなたの資産価値、無料で知れます</h3>
+<p style="font-size: 15px; line-height: 1.8; color: #666; margin-bottom: 15px;">
+このデータは参考値です。あなたの物件の正確な価値は、複数の不動産会社に査定してもらうことで分かります。<br/>
+無料で査定できるので、今の資産価値を確認してみませんか？
+</p>
+<p style="font-size: 14px; line-height: 1.6; color: #888; margin-bottom: 25px;">
+机上査定なら、電話なしでメールのみで結果を受け取れます
+</p>
+<div style="margin-bottom: 15px;">
+<a href="{url}" rel="nofollow noopener" style="display: inline-block; background-color: #FF6B35; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 16px;" target="_blank">{button_text}</a>
+</div>
+</div>
+'''
 
     def _apply_inline_styles(self, html: str) -> str:
         """
