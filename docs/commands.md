@@ -52,6 +52,66 @@ python scripts/post_to_wordpress.py --reset-all
 - `--reset-all`: 全記事のWordPress情報をリセット
 - `--project`: プロジェクトディレクトリ（デフォルト: `projects/setagaya_real_estate`）
 
+### アフィリエイトリンク更新（再投稿）
+
+ASP承認後、既存の投稿を更新する場合：
+
+```bash
+# 全記事を再HTML化してWordPressを更新
+python scripts/republish_articles.py --project projects/setagaya_real_estate/config.yml
+
+# 指定件数だけ更新
+python scripts/republish_articles.py --project projects/setagaya_real_estate/config.yml --limit 10
+```
+
+**使用手順**:
+
+1. **ASP承認前**: ダミーリンク（`example.com`）で記事を投稿
+   ```bash
+   python scripts/post_to_wordpress.py --limit 128
+   ```
+
+2. **ASP承認後**: `affiliate_config.yml` を更新
+   ```yaml
+   affiliates:
+     primary:
+       url: "https://tracking.example.com/click?id=12345"  # ← 本番リンクに変更
+   ```
+
+3. **再投稿実行**: 既存投稿を更新
+   ```bash
+   python scripts/republish_articles.py --project projects/setagaya_real_estate/config.yml
+   ```
+
+**オプション**:
+- `--project`: プロジェクト設定ファイルのパス（必須）
+- `--limit`: 更新する記事数（省略時は全件）
+
+**注意**: 
+- Markdownファイルはそのまま（データが保全される）
+- 投稿ID、URLが変わらない（SEO的に安全）
+- 完全自動化可能
+
+### 全投稿のリセットと再投稿
+
+投稿済みの記事を全てリセットして、最初から投稿し直す場合：
+
+```bash
+# 1. 全記事のWordPress投稿情報をリセット
+python scripts/post_to_wordpress.py --reset-all
+
+# 2. 確認メッセージで 'y' を入力
+
+# 3. リセット後、全記事を再投稿
+python scripts/post_to_wordpress.py
+```
+
+**注意**:
+- `--reset-all` は `wp_post_id`, `wp_url`, `wp_status`, `wp_posted_at` を NULL にリセットします
+- 記事のMarkdown/HTMLファイルは削除されません
+- リセット後は未投稿状態になるため、通常の投稿コマンドで再投稿できます
+- WordPress側の既存投稿は削除されません（手動で削除する必要があります）
+
 ---
 
 ## 🗄️ データベース操作
@@ -243,6 +303,19 @@ python scripts/post_to_wordpress.py --limit 1
 python scripts/post_to_wordpress.py --limit 9
 ```
 
+### ASP承認後のアフィリエイトリンク更新
+
+```bash
+# 1. affiliate_config.yml を更新（本番リンクに変更）
+# ファイル: projects/setagaya_real_estate/affiliate_config.yml
+
+# 2. 全記事を再HTML化してWordPressを更新
+python scripts/republish_articles.py --project projects/setagaya_real_estate/config.yml
+
+# 3. 更新結果を確認
+python scripts/show_article_stats.py
+```
+
 ### メンテナンス作業
 
 ```bash
@@ -254,6 +327,16 @@ python scripts/show_article_stats.py
 
 # 3. 必要に応じて再投稿
 python scripts/post_to_wordpress.py --republish --limit 5
+```
+
+### 全投稿のリセットと再投稿
+
+```bash
+# 1. 全記事のWordPress投稿情報をリセット
+python scripts/post_to_wordpress.py --reset-all
+
+# 2. リセット後、全記事を再投稿
+python scripts/post_to_wordpress.py
 ```
 
 ---
@@ -307,6 +390,49 @@ REINFOLIB_API_TIMEOUT=30
 1. ログファイルを確認: `logs/real_estate_bot.log`
 2. データベース接続を確認: `docker ps`
 3. 環境変数を確認: `.env`ファイルの設定
+
+---
+
+---
+
+## 📋 アフィリエイト設定ファイル
+
+### `affiliate_config.yml` の構造
+
+**場所**: `projects/setagaya_real_estate/affiliate_config.yml`
+
+```yaml
+# アフィリエイトリンク設定
+affiliates:
+  primary:
+    name: "イエウール"
+    url: "https://example.com/ieul"  # ← ASP承認後に本番リンクに変更
+    button_text: "【無料】60秒で{choume}の最高値を調べる"
+    color: "#FF6B35"
+    description: "全国1,600社以上の不動産会社から最大6社に一括査定"
+  
+  secondary:
+    name: "すまいValue"
+    url: "https://example.com/sumai"  # ← ASP承認後に本番リンクに変更
+    button_text: "大手6社に査定を依頼"
+    color: "#1E3A8A"
+    description: "三井のリハウス、住友不動産販売など大手6社に一括査定"
+
+# デフォルト設定
+default:
+  show_secondary: false  # 2つ目のボタンを表示するか
+```
+
+**ASP承認後の更新例**:
+```yaml
+affiliates:
+  primary:
+    url: "https://tracking.example.com/click?id=12345&siteid=xxx"  # ← 変更
+```
+
+**注意**: 
+- `{choume}` プレースホルダーは自動的に町丁目名に置き換えられます
+- 設定ファイルを更新後、`republish_articles.py` を実行すると既存投稿が更新されます
 
 ---
 

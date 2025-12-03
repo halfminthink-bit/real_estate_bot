@@ -262,7 +262,7 @@ class HTMLBuilder:
     
     def _build_affiliate_section(self, choume: str = "") -> str:
         """
-        アフィリエイトセクションのHTML生成
+        アフィリエイトセクションのHTML生成（設定ファイルから取得）
         
         Args:
             choume: 町丁目名（例: "三軒茶屋2丁目"）
@@ -270,30 +270,56 @@ class HTMLBuilder:
         if not self.affiliate_config:
             return ''
         
-        # ボタンテキスト（町丁目名を含める）
-        button_text = f"【無料】60秒で{choume}の最高値を調べる" if choume else "【無料】60秒で最高値を調べる"
+        # 新しい構造に対応（affiliates.primary/secondary）
+        affiliates = self.affiliate_config.get('affiliates', {})
+        primary = affiliates.get('primary', {})
         
-        # アフィリエイト設定からURLを取得（最初の1つ）
-        url = '#'
-        for key, config in self.affiliate_config.items():
-            url = config.get('url', '#')
-            break
+        # プライマリボタンが存在しない場合は空を返す
+        if not primary:
+            return ''
         
-        return f'''
-<div style="background-color: #f8f9fa; padding: 30px; border-radius: 8px; margin: 40px 0; text-align: center;">
-<h3 style="font-size: 20px; margin-bottom: 15px; color: #333;">💡 あなたの資産価値、無料で知れます</h3>
-<p style="font-size: 15px; line-height: 1.8; color: #666; margin-bottom: 15px;">
-このデータは参考値です。あなたの物件の正確な価値は、複数の不動産会社に査定してもらうことで分かります。<br/>
-無料で査定できるので、今の資産価値を確認してみませんか？
-</p>
-<p style="font-size: 14px; line-height: 1.6; color: #888; margin-bottom: 25px;">
-机上査定なら、電話なしでメールのみで結果を受け取れます
-</p>
-<div style="margin-bottom: 15px;">
-<a href="{url}" rel="nofollow noopener" style="display: inline-block; background-color: #FF6B35; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 16px;" target="_blank">{button_text}</a>
-</div>
+        # 設定から取得
+        primary_url = primary.get('url', '#')
+        primary_color = primary.get('color', '#ce0000')  # デフォルトは赤
+        
+        # ボタンテキスト（設定があれば使用、なければデフォルト）
+        button_text = primary.get('button_text', '無料で査定額をチェックする')
+        # {choume}プレースホルダーがあれば置換（新しいデザインではタイトルに使用）
+        
+        # 町丁目名の処理（「丁目」を除いた形式も準備）
+        choume_display = choume if choume else ""
+        
+        # 新しいデザインのHTML生成
+        html = f'''
+<div style="background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 0; margin: 40px 0; box-shadow: 0 10px 25px rgba(0,0,0,0.05); overflow: hidden;">
+    <div style="background: {primary_color}; padding: 15px; text-align: center;">
+        <span style="color: #fff; font-weight: bold; font-size: 14px; letter-spacing: 1px;">＼ 39年連続 売買仲介件数 No.1 ／</span>
+    </div>
+
+    <div style="padding: 30px 20px; text-align: center;">
+        <h3 style="font-size: 20px; font-weight: bold; margin-bottom: 15px; color: #333; line-height: 1.5;">
+            {choume_display}の資産価値を知るなら<br>
+            <span style="background: linear-gradient(transparent 70%, #ffecb3 70%);">実績No.1の「三井のリハウス」</span>一択です
+        </h3>
+        
+        <p style="font-size: 14px; line-height: 1.8; color: #666; margin-bottom: 25px; text-align: left;">
+            平均価格を見るだけでは不十分です。このエリアを知り尽くした業界最大手の査定で、あなたの土地の<b>「本当の最高値」</b>を確かめてみませんか？
+        </p>
+
+        <div style="margin-bottom: 15px;">
+            <a href="{primary_url}" rel="nofollow noopener" style="display: block; width: 100%; max-width: 350px; margin: 0 auto; background-color: {primary_color}; color: white; padding: 18px 10px; text-decoration: none; border-radius: 50px; font-weight: bold; font-size: 18px; box-shadow: 0 4px 10px rgba(206, 0, 0, 0.3); transition: opacity 0.3s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'" target="_blank">
+                {button_text}
+            </a>
+        </div>
+        
+        <p style="font-size: 12px; color: #888;">
+            ※申込みは60秒。売却の義務はありません。
+        </p>
+    </div>
 </div>
 '''
+        
+        return html
 
     def _apply_inline_styles(self, html: str) -> str:
         """

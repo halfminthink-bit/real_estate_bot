@@ -480,4 +480,41 @@ class ArticleManager:
                 "SELECT * FROM articles ORDER BY generated_at"
             )
             return [dict(row) for row in cursor.fetchall()]
+    
+    def get_published_articles(self, limit: int = None) -> List[Dict]:
+        """
+        投稿済みの記事を取得
+        
+        Args:
+            limit: 取得する記事数（Noneの場合は全件）
+        
+        Returns:
+            List[Dict]: 記事のリスト
+        """
+        with sqlite3.connect(self.db_path, timeout=30.0) as conn:
+            conn.row_factory = sqlite3.Row
+            
+            # テーブルのカラムを確認
+            cursor = conn.execute("PRAGMA table_info(articles)")
+            columns = [col[1] for col in cursor.fetchall()]
+            
+            # README.mdのスキーマに基づく（chart_pathも含める）
+            query = '''
+                SELECT id, ward, choume, title, markdown_path, html_path, chart_path,
+                       wp_post_id, wp_url, wp_status
+                FROM articles
+                WHERE wp_post_id IS NOT NULL
+            '''
+            
+            # created_atが存在する場合はそれでソート、存在しない場合はidでソート
+            if 'created_at' in columns:
+                query += ' ORDER BY created_at DESC'
+            else:
+                query += ' ORDER BY id DESC'
+            
+            if limit:
+                query += f' LIMIT {limit}'
+            
+            cursor = conn.execute(query)
+            return [dict(row) for row in cursor.fetchall()]
 

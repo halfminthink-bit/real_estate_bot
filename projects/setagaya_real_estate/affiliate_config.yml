@@ -1,13 +1,19 @@
-ieul:
-  name: "イエウール"
-  url: "https://example.com/ieul"  # Phase 1はダミーURL（Phase 2で実際のアフィリエイトリンクに差し替え）
-  text: "無料で複数社に一括査定を依頼する"
-  button_color: "#FF6B35"
-  description: "全国1,600社以上の不動産会社から最大6社に一括査定"
+# アフィリエイトリンク設定
+affiliates:
+  primary:
+    name: "不動産SHOPナカジツ"
+    url: "https://www.rehouse.co.jp/sell/?sid=011g1a483999000000&utm_source=google&utm_medium=cpc&utm_campaign=%25E3%2580%2590G%25E3%2580%2591_%255BA%25E5%2585%25B1%25E9%2580%259A%255D_%255BS%255D_01%25E7%25A4%25BE%25E5%2590%258D-%25E3%2583%25AA%25E3%2583%258F%25E3%2582%25A6%25E3%2582%25B9%25C3%2597%25E4%25B8%2580%25E8%2588%25AC-%25E5%25A3%25B2%25E5%258D%25B4&utm_content=dd_com_sear_brd_gg_brd_0002&gad_source=1&gad_campaignid=131239831&gbraid=0AAAAAC_vllW-I4lcsoxkSsSAtLmHCaYna&gclid=CjwKCAiA3L_JBhAlEiwAlcWO54sFYZgpz8D7WcVYBqD7ttDvARIaG-k5oEzKUhOeY_YGwCOxaNtM2xoCLi4QAvD_BwE"  # Phase 1はダミーURL（Phase 2で実際のアフィリエイトリンクに差し替え）
+    button_text: "無料で査定額をチェックする"
+    color: "#FF6B35"
+    description: "全国1,600社以上の不動産会社から最大6社に一括査定"
+  
+  secondary:
+    name: "すまいValue"
+    url: "https://example.com/sumai"  # Phase 1はダミーURL（Phase 2で実際のアフィリエイトリンクに差し替え）
+    button_text: "大手6社に査定を依頼"
+    color: "#1E3A8A"
+    description: "三井のリハウス、住友不動産販売など大手6社に一括査定"
 
-sumai_value:
-  name: "すまいValue"
-  url: "https://example.com/sumai"  # Phase 1はダミーURL（Phase 2で実際のアフィリエイトリンクに差し替え）
-  text: "大手6社に査定依頼"
-  button_color: "#1E3A8A"
-  description: "三井のリハウス、住友不動産販売など大手6社に一括査定"
+# デフォルト設定
+default:
+  show_secondary: false  # 2つ目のボタンを表示するか
