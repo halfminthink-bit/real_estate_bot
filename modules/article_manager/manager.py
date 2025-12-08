@@ -54,6 +54,8 @@ class ArticleManager:
                     wp_url TEXT,
                     wp_posted_at TIMESTAMP,
                     wp_status TEXT,
+                    wp_chart_media_id INTEGER,
+                    wp_chart_url TEXT,
                     UNIQUE(ward, choume)
                 )
             """)
@@ -70,6 +72,17 @@ class ArticleManager:
                     FOREIGN KEY (article_id) REFERENCES articles(id)
                 )
             """)
+            
+            # 既存DBに新カラムを追加（存在しない場合のみ）
+            try:
+                conn.execute("ALTER TABLE articles ADD COLUMN wp_chart_media_id INTEGER")
+            except sqlite3.OperationalError:
+                pass  # カラムが既に存在する場合は無視
+            
+            try:
+                conn.execute("ALTER TABLE articles ADD COLUMN wp_chart_url TEXT")
+            except sqlite3.OperationalError:
+                pass  # カラムが既に存在する場合は無視
             
             conn.commit()
             logger.info("Database initialized")
@@ -517,4 +530,55 @@ class ArticleManager:
             
             cursor = conn.execute(query)
             return [dict(row) for row in cursor.fetchall()]
+    
+    def get_chart_media_info(self, ward: str, choume: str) -> dict:
+        """
+        画像のWordPress Media情報を取得
+        
+        Args:
+            ward: 区
+            choume: 町丁目
+        
+        Returns:
+            dict: {'media_id': int or None, 'url': str or None}
+        """
+        with sqlite3.connect(self.db_path, timeout=30.0) as conn:
+            cursor = conn.execute(
+                "SELECT wp_chart_media_id, wp_chart_url FROM articles WHERE ward = ? AND choume = ?",
+                (ward, choume)
+            )
+            result = cursor.fetchone()
+            
+            if result:
+                return {
+                    'media_id': result[0],
+                    'url': result[1]
+                }
+            return {'media_id': None, 'url': None}
+    
+    def update_chart_media_info(self, ward: str, choume: str, media_id: int, url: str) -> bool:
+        """
+        画像のWordPress Media情報を更新
+        
+        Args:
+            ward: 区
+            choume: 町丁目
+            media_id: WordPress Media ID
+            url: アップロード後のURL
+        
+        Returns:
+            bool: 更新成功したかどうか
+        """
+        with sqlite3.connect(self.db_path, timeout=30.0) as conn:
+            conn.execute(
+                '''
+                UPDATE articles
+                SET wp_chart_media_id = ?, wp_chart_url = ?
+                WHERE ward = ? AND choume = ?
+                ''',
+                (media_id, url, ward, choume)
+            )
+            conn.commit()
+            logger.info(f"Updated chart media info for {ward}{choume}: ID={media_id}")
+            return True
 

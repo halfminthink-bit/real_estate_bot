@@ -153,9 +153,10 @@ class WordPressPublisher:
                     
                     if chart_path.exists():
                         # WordPressにアップロード
-                        uploaded_url = self._upload_image_to_wordpress(chart_path)
+                        upload_result = self._upload_image_to_wordpress(chart_path)
                         
-                        if uploaded_url:
+                        if upload_result:
+                            uploaded_url = upload_result['url']
                             # HTML内の画像パスを置き換え
                             import re
                             
@@ -239,7 +240,7 @@ class WordPressPublisher:
             "skipped": 0
         }
     
-    def _upload_image_to_wordpress(self, image_path: Path) -> Optional[str]:
+    def _upload_image_to_wordpress(self, image_path: Path) -> Optional[dict]:
         """
         画像をWordPress Media Libraryにアップロード
         
@@ -247,7 +248,7 @@ class WordPressPublisher:
             image_path: ローカル画像パス
         
         Returns:
-            アップロードされた画像URL or None
+            dict: {'url': str, 'media_id': int} or None
         """
         import mimetypes
         import hashlib
@@ -296,7 +297,10 @@ class WordPressPublisher:
                 media_id = media_data['id']
                 print(f"  ✅ 画像アップロード成功: ID={media_id}")
                 print(f"  🔗 URL: {media_url}")
-                return media_url
+                return {
+                    'url': media_url,
+                    'media_id': media_id
+                }
             else:
                 print(f"  ❌ 画像アップロード失敗: {response.text[:200]}")
                 return None
@@ -493,10 +497,15 @@ class WordPressPublisher:
             if cat_id:
                 category_ids.append(cat_id)
         
+        # HTMLをGutenbergのHTMLブロックでラップ
+        gutenberg_content = f'''<!-- wp:html -->
+{content}
+<!-- /wp:html -->'''
+        
         # 投稿データ
         post_data = {
             'title': title,
-            'content': content,
+            'content': gutenberg_content,
             'slug': slug,
             'status': post_status,
         }
@@ -682,9 +691,14 @@ class WordPressPublisher:
         
         url = f"{self.api_url}/posts/{post_id}"
         
+        # HTMLをGutenbergのHTMLブロックでラップ
+        gutenberg_content = f'''<!-- wp:html -->
+{content}
+<!-- /wp:html -->'''
+        
         data = {
             'title': title,
-            'content': content,
+            'content': gutenberg_content,
             'status': status
         }
         

@@ -65,6 +65,10 @@ class HTMLBuilder:
         with open(markdown_path, 'r', encoding='utf-8') as f:
             md_content = f.read()
 
+        # タイトルと町丁目名を先に抽出（後で使用）
+        title = self._extract_title(md_content)
+        choume = self._extract_choume_from_title(title)
+
         # 1. <CHART>置換（改善版）
         if '<CHART>' in md_content:
             if chart_path and chart_path.exists():
@@ -88,29 +92,46 @@ class HTMLBuilder:
         # 3. 画像パス調整（既存のまま）
         md_content = self._adjust_image_paths(md_content)
 
-        # 4. <AFFILIATE>置換
-        # 注意: マーカーの前後のテキスト（安心要素、最後の一押し）はLLMが生成するため保持されます
-        # マーカー部分のみを設定ファイルから取得したURLを含むボタンに置き換えます
-        # タイトルから町丁目名を抽出
-        title = self._extract_title(md_content)
-        choume = self._extract_choume_from_title(title)
-        affiliate_html = self._build_affiliate_section(choume)
-        md_content = md_content.replace('<AFFILIATE>', affiliate_html)
+        # ============================================================
+        # 【重要な修正】<AFFILIATE>マーカーはMarkdown変換後に置換する
+        # ============================================================
+        # 4. <AFFILIATE>マーカーはそのまま残す（一時的なプレースホルダーに置換）
+        # 注意: アンダースコア3つ(___) はMarkdownで<strong><em>に変換されるため使用しない
+        affiliate_placeholder = "XAFFILIATEPLCHLDRX"
+        has_affiliate = '<AFFILIATE>' in md_content
+        if has_affiliate:
+            md_content = md_content.replace('<AFFILIATE>', affiliate_placeholder)
+            logger.info(f"<AFFILIATE> marker found, will be replaced after Markdown conversion")
 
-        # 5. Markdown → HTML（既存のまま）
+        # 5. Markdown → HTML（<AFFILIATE>なしの状態で実行）
         html_content = markdown.markdown(md_content, extensions=['extra', 'nl2br'])
 
-        # 5.5. インラインCSSを適用（WordPress対応）
+        # 6. 【重要な修正】Markdown変換後にアフィリエイトHTMLを挿入
+        if has_affiliate:
+            logger.info(f"Replacing affiliate placeholder for {choume}")
+            affiliate_html = self._build_affiliate_section(choume)
+            if affiliate_html:
+                # プレースホルダーをHTMLに置換
+                # 注意: プレースホルダーが<p>タグで囲まれている場合に対応
+                html_content = html_content.replace(f'<p>{affiliate_placeholder}</p>', affiliate_html)
+                html_content = html_content.replace(affiliate_placeholder, affiliate_html)
+                logger.info(f"Successfully replaced affiliate placeholder (length: {len(affiliate_html)} chars)")
+            else:
+                # アフィリエイトHTMLが空の場合はプレースホルダーを削除
+                html_content = html_content.replace(f'<p>{affiliate_placeholder}</p>', '')
+                html_content = html_content.replace(affiliate_placeholder, '')
+                logger.warning(f"Affiliate HTML is empty, placeholder removed")
+
+        # 7. インラインCSSを適用（WordPress対応）
         html_content = self._apply_inline_styles(html_content)
 
-        # 6. テンプレート適用（既存のまま）
+        # 8. テンプレート適用（既存のまま）
         if self.template_path.exists():
             with open(self.template_path, 'r', encoding='utf-8') as f:
                 template = f.read()
         else:
             template = self._get_default_template()
 
-        title = self._extract_title(md_content)
         h1_title = title
         meta_description = self._extract_description(md_content)
         update_date = datetime.now().strftime('%Y年%m月%d日')
@@ -121,7 +142,7 @@ class HTMLBuilder:
         html = html.replace('{{ content }}', html_content)
         html = html.replace('{{ update_date }}', update_date)
 
-        # 7. 保存
+        # 9. 保存
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(html)
 
@@ -262,63 +283,52 @@ class HTMLBuilder:
     
     def _build_affiliate_section(self, choume: str = "") -> str:
         """
-        アフィリエイトセクションのHTML生成（設定ファイルから取得）
+        アフィリエイトセクションのHTMLを生成（テンプレート版）
+        
+        テンプレート: templates/affiliate_section.html
+        設定: affiliate_config.yml
         
         Args:
             choume: 町丁目名（例: "三軒茶屋2丁目"）
+        
+        Returns:
+            str: アフィリエイトセクションのHTML
         """
         if not self.affiliate_config:
+            logger.warning("Affiliate config is empty")
             return ''
         
-        # 新しい構造に対応（affiliates.primary/secondary）
+        # 設定を取得
         affiliates = self.affiliate_config.get('affiliates', {})
         primary = affiliates.get('primary', {})
         
-        # プライマリボタンが存在しない場合は空を返す
         if not primary:
+            logger.warning(f"Primary affiliate not found in config")
             return ''
         
-        # 設定から取得
-        primary_url = primary.get('url', '#')
-        primary_color = primary.get('color', '#ce0000')  # デフォルトは赤
+        # テンプレートファイルを読み込み
+        template_path = self.config.get_affiliate_template_path()
+        if not template_path.exists():
+            logger.warning(f"Affiliate template not found: {template_path}")
+            return ''
         
-        # ボタンテキスト（設定があれば使用、なければデフォルト）
-        button_text = primary.get('button_text', '無料で査定額をチェックする')
-        # {choume}プレースホルダーがあれば置換（新しいデザインではタイトルに使用）
+        with open(template_path, 'r', encoding='utf-8') as f:
+            template = f.read()
         
-        # 町丁目名の処理（「丁目」を除いた形式も準備）
-        choume_display = choume if choume else ""
+        # 設定値を取得
+        name = primary.get('name', '')
+        url = primary.get('url', '#')
+        button_text = primary.get('button_text', '無料で査定する')
+        color = primary.get('color', '#00B900')
         
-        # 新しいデザインのHTML生成
-        html = f'''
-<div style="background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 0; margin: 40px 0; box-shadow: 0 10px 25px rgba(0,0,0,0.05); overflow: hidden;">
-    <div style="background: {primary_color}; padding: 15px; text-align: center;">
-        <span style="color: #fff; font-weight: bold; font-size: 14px; letter-spacing: 1px;">＼ 39年連続 売買仲介件数 No.1 ／</span>
-    </div>
-
-    <div style="padding: 30px 20px; text-align: center;">
-        <h3 style="font-size: 20px; font-weight: bold; margin-bottom: 15px; color: #333; line-height: 1.5;">
-            {choume_display}の資産価値を知るなら<br>
-            <span style="background: linear-gradient(transparent 70%, #ffecb3 70%);">実績No.1の「三井のリハウス」</span>一択です
-        </h3>
+        # テンプレートに変数を埋め込み
+        html = template.replace('{{ choume }}', choume if choume else '')
+        html = html.replace('{{ name }}', name)
+        html = html.replace('{{ url }}', url)
+        html = html.replace('{{ button_text }}', button_text)
+        html = html.replace('{{ color }}', color)
         
-        <p style="font-size: 14px; line-height: 1.8; color: #666; margin-bottom: 25px; text-align: left;">
-            平均価格を見るだけでは不十分です。このエリアを知り尽くした業界最大手の査定で、あなたの土地の<b>「本当の最高値」</b>を確かめてみませんか？
-        </p>
-
-        <div style="margin-bottom: 15px;">
-            <a href="{primary_url}" rel="nofollow noopener" style="display: block; width: 100%; max-width: 350px; margin: 0 auto; background-color: {primary_color}; color: white; padding: 18px 10px; text-decoration: none; border-radius: 50px; font-weight: bold; font-size: 18px; box-shadow: 0 4px 10px rgba(206, 0, 0, 0.3); transition: opacity 0.3s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'" target="_blank">
-                {button_text}
-            </a>
-        </div>
-        
-        <p style="font-size: 12px; color: #888;">
-            ※申込みは60秒。売却の義務はありません。
-        </p>
-    </div>
-</div>
-'''
-        
+        logger.info(f"Built affiliate section from template for {choume}")
         return html
 
     def _apply_inline_styles(self, html: str) -> str:

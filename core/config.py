@@ -82,3 +82,10 @@ class ProjectConfig:
         if affiliate_file:
             return Path(affiliate_file)
         return self.project_dir / 'affiliate_config.yml'
+    
+    def get_affiliate_template_path(self) -> Path:
+        """アフィリエイトテンプレートファイルのパスを取得"""
+        template_file = self._config.get('html', {}).get('affiliate_template')
+        if template_file:
+            return Path(template_file)
+        return self.templates_dir / 'affiliate_section.html'

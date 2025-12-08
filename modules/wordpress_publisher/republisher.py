@@ -16,6 +16,7 @@ ASP承認後、affiliate_config.ymlを更新してから実行
 """
 
 import logging
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -125,6 +126,52 @@ def republish_articles(project_path: str, limit: Optional[int] = None) -> int:
             with open(html_path, 'r', encoding='utf-8') as f:
                 html_content = f.read()
             
+            # 画像をWordPressにアップロードしてパスを置換
+            uploaded_url = None
+            
+            if chart_path and chart_path.exists():
+                import re
+                
+                # 既にアップロード済みか確認
+                media_info = article_manager.get_chart_media_info(
+                    ward=article['ward'],
+                    choume=article['choume']
+                )
+                
+                if media_info['url']:
+                    # 既にアップロード済み → 再利用
+                    uploaded_url = media_info['url']
+                    logger.info(f"  ♻️  Reusing existing image: {uploaded_url}")
+                else:
+                    # 新規アップロード
+                    logger.info(f"  → Uploading chart image to WordPress...")
+                    upload_result = wp_publisher._upload_image_to_wordpress(chart_path)
+                    
+                    if upload_result:
+                        uploaded_url = upload_result['url']
+                        media_id = upload_result['media_id']
+                        
+                        # DBに保存
+                        article_manager.update_chart_media_info(
+                            ward=article['ward'],
+                            choume=article['choume'],
+                            media_id=media_id,
+                            url=uploaded_url
+                        )
+                        logger.info(f"  ✅ Image uploaded and saved: {uploaded_url} (ID: {media_id})")
+                    else:
+                        logger.warning(f"  ⚠️ Image upload failed, keeping local path")
+                
+                # HTML内の画像パスを置き換え
+                if uploaded_url:
+                    html_content = re.sub(
+                        r'(<img[^>]*?\s)src="([^"]+)"',
+                        lambda m: f'{m.group(1)}src="{uploaded_url}"' if 'charts/' in m.group(2) else m.group(0),
+                        html_content
+                    )
+            else:
+                logger.info(f"  ℹ️ No chart image to upload")
+            
             # WordPress用に本文部分のみを抽出
             body_content = wp_publisher._extract_body_content(html_content)
             
@@ -160,5 +207,7 @@ def republish_articles(project_path: str, limit: Optional[int] = None) -> int:
     logger.info("=" * 70)
     
     return 0 if failed_count == 0 else 1
+
+
 
 

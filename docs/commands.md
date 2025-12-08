@@ -40,7 +40,7 @@ python scripts/post_to_wordpress.py
 python scripts/post_to_wordpress.py --limit 10
 
 # 再投稿モード（投稿済み記事も含む）
-python scripts/post_to_wordpress.py --republish --limit 5
+python scripts/post_to_wordpress.py --republish --limit 1
 
 # 全記事のWordPress情報をリセット（再投稿準備）
 python scripts/post_to_wordpress.py --reset-all
@@ -52,13 +52,38 @@ python scripts/post_to_wordpress.py --reset-all
 - `--reset-all`: 全記事のWordPress情報をリセット
 - `--project`: プロジェクトディレクトリ（デフォルト: `projects/setagaya_real_estate`）
 
+### HTML再生成
+
+既存のMarkdownファイルからHTMLを再生成する場合：
+
+```bash
+# 全記事のHTMLを再生成
+python scripts/rebuild_html.py --project projects/setagaya_real_estate/config.yml
+
+# 指定件数だけ再生成
+python scripts/rebuild_html.py --project projects/setagaya_real_estate/config.yml --limit 10
+
+# 強制再生成（既存HTMLを上書き）
+python scripts/rebuild_html.py --project projects/setagaya_real_estate/config.yml --force
+```
+
+**オプション**:
+- `--project`: プロジェクト設定ファイルのパス（必須）
+- `--limit`: 再生成する記事数（省略時は全件）
+- `--force`: 既存HTMLがあっても強制的に上書き
+
+**用途**:
+- アフィリエイト設定変更後のHTML再生成
+- テンプレート変更後のHTML再生成
+- デザイン修正後のHTML再生成
+
 ### アフィリエイトリンク更新（再投稿）
 
 ASP承認後、既存の投稿を更新する場合：
 
 ```bash
 # 全記事を再HTML化してWordPressを更新
-python scripts/republish_articles.py --project projects/setagaya_real_estate/config.yml
+python scripts/republish_articles.py --project projects/setagaya_real_estate/config.yml 
 
 # 指定件数だけ更新
 python scripts/republish_articles.py --project projects/setagaya_real_estate/config.yml --limit 10
@@ -78,7 +103,12 @@ python scripts/republish_articles.py --project projects/setagaya_real_estate/con
        url: "https://tracking.example.com/click?id=12345"  # ← 本番リンクに変更
    ```
 
-3. **再投稿実行**: 既存投稿を更新
+3. **HTML再生成**: アフィリエイト設定を反映したHTMLを再生成
+   ```bash
+   python scripts/rebuild_html.py --project projects/setagaya_real_estate/config.yml --force
+   ```
+
+4. **WordPress再投稿**: 既存投稿を更新
    ```bash
    python scripts/republish_articles.py --project projects/setagaya_real_estate/config.yml
    ```
@@ -90,6 +120,7 @@ python scripts/republish_articles.py --project projects/setagaya_real_estate/con
 **注意**: 
 - Markdownファイルはそのまま（データが保全される）
 - 投稿ID、URLが変わらない（SEO的に安全）
+- 画像も自動的にWordPressにアップロードされる
 - 完全自動化可能
 
 ### 全投稿のリセットと再投稿
@@ -309,11 +340,23 @@ python scripts/post_to_wordpress.py --limit 9
 # 1. affiliate_config.yml を更新（本番リンクに変更）
 # ファイル: projects/setagaya_real_estate/affiliate_config.yml
 
-# 2. 全記事を再HTML化してWordPressを更新
+# 2. 全記事のHTMLを再生成（アフィリエイト設定を反映）
+python scripts/rebuild_html.py --project projects/setagaya_real_estate/config.yml --force
+
+# 3. 生成されたHTMLを確認（アフィリエイトセクションが入っているか）
+grep -A 10 "市場全体" projects/setagaya_real_estate/html/世田谷区三軒茶屋1丁目.html
+
+# 4. WordPressに再投稿（既存投稿を更新）
 python scripts/republish_articles.py --project projects/setagaya_real_estate/config.yml
 
-# 3. 更新結果を確認
+# 5. 更新結果を確認
 python scripts/show_article_stats.py
+```
+
+**または、Pythonから直接実行**:
+```bash
+# WordPressに再投稿（republisherモジュールを直接使用）
+python -c "from modules.wordpress_publisher.republisher import republish_articles; republish_articles('projects/setagaya_real_estate/config.yml')"
 ```
 
 ### メンテナンス作業
@@ -405,22 +448,14 @@ REINFOLIB_API_TIMEOUT=30
 # アフィリエイトリンク設定
 affiliates:
   primary:
-    name: "イエウール"
-    url: "https://example.com/ieul"  # ← ASP承認後に本番リンクに変更
-    button_text: "【無料】60秒で{choume}の最高値を調べる"
-    color: "#FF6B35"
-    description: "全国1,600社以上の不動産会社から最大6社に一括査定"
-  
-  secondary:
-    name: "すまいValue"
-    url: "https://example.com/sumai"  # ← ASP承認後に本番リンクに変更
-    button_text: "大手6社に査定を依頼"
-    color: "#1E3A8A"
-    description: "三井のリハウス、住友不動産販売など大手6社に一括査定"
+    name: "ミライアス"
+    url: "https://px.a8.net/svt/ejp?a8mat=45K45A+DDNS9E+4I6M+614CY"
+    button_text: "あなたの土地の価値を確認する（無料）"
+    color: "#00B900"
 
 # デフォルト設定
 default:
-  show_secondary: false  # 2つ目のボタンを表示するか
+  show_secondary: false
 ```
 
 **ASP承認後の更新例**:
@@ -430,9 +465,18 @@ affiliates:
     url: "https://tracking.example.com/click?id=12345&siteid=xxx"  # ← 変更
 ```
 
+**テンプレートファイル**: `projects/setagaya_real_estate/templates/affiliate_section.html`
+- HTMLデザインを変更する場合はこのファイルを編集
+- 変数プレースホルダー: `{{ choume }}`, `{{ url }}`, `{{ button_text }}`, `{{ color }}`, `{{ name }}`
+
+**更新手順**: 
+1. `affiliate_config.yml` を編集（URL、テキスト、色など）
+2. `python scripts/rebuild_html.py --project projects/setagaya_real_estate/config.yml --force` でHTML再生成
+3. `python scripts/republish_articles.py --project projects/setagaya_real_estate/config.yml` でWordPress再投稿
+
 **注意**: 
-- `{choume}` プレースホルダーは自動的に町丁目名に置き換えられます
-- 設定ファイルを更新後、`republish_articles.py` を実行すると既存投稿が更新されます
+- 設定変更は `affiliate_config.yml` のみ編集（Pythonコードは触らない）
+- デザイン変更は `templates/affiliate_section.html` のみ編集
 
 ---
 
